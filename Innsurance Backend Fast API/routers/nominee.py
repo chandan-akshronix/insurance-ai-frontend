@@ -19,14 +19,27 @@ def create_nominee(nominee: schemas.NomineeCreate, db: Session = Depends(get_db)
 
 @router.get("/", response_model=list[schemas.Nominee])
 def read_nominees(db: Session = Depends(get_db)):
-    return crud.get_all(db, models.Nominee)
+    nominees = crud.get_all(db, models.Nominee)
+    return [{"nomineeId": n.id,
+             "userId": n.userId,
+             "policyId": n.policyId,
+             "name": n.name,
+             "relationship": getattr(n, 'relationship_type', None),
+             "phone": n.phone,
+             "email": n.email} for n in nominees]
 
 @router.get("/{nominee_id}", response_model=schemas.Nominee)
 def read_nominee(nominee_id: int, db: Session = Depends(get_db)):
     nominee = crud.get_by_id(db, models.Nominee, "id", nominee_id)
     if not nominee:
         raise HTTPException(status_code=404, detail="Nominee not found")
-    return nominee
+    return {"nomineeId": nominee.id,
+            "userId": nominee.userId,
+            "policyId": nominee.policyId,
+            "name": nominee.name,
+            "relationship": getattr(nominee, 'relationship_type', None),
+            "phone": nominee.phone,
+            "email": nominee.email}
 
 @router.delete("/{nominee_id}")
 def delete_nominee(nominee_id: int, db: Session = Depends(get_db)):

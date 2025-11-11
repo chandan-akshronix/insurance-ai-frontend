@@ -170,9 +170,7 @@ class ContactCreate(ContactBase):
 class Contact(ContactBase):
     contactId: int
     model_config = {"from_attributes": True}
-    # Backwards-compatible Pydantic v1 config
-    class Config:
-        orm_mode = True
+    # Pydantic v2 model config replaces v1 Config
 
 class ContactUpdate(BaseModel):
     fullName: Optional[str] = None
@@ -194,9 +192,7 @@ class QuotationCreate(QuotationBase):
 class Quotation(QuotationBase):
     quotationId: int
     model_config = {"from_attributes": True}
-    # Backwards-compatible Pydantic v1 config
-    class Config:
-        orm_mode = True
+    # Pydantic v2 model config replaces v1 Config
 
 class QuotationUpdate(BaseModel):
     category: Optional[PolicyType] = None
@@ -220,9 +216,7 @@ class DocumentCreate(DocumentBase):
 class Document(DocumentBase):
     documentId: int
     model_config = {"from_attributes": True}
-    # Backwards-compatible Pydantic v1 config
-    class Config:
-        orm_mode = True
+    # Pydantic v2 model config replaces v1 Config
 
 class DocumentUpdate(BaseModel):
     documentType: Optional[str] = None
@@ -243,9 +237,7 @@ class NomineeCreate(NomineeBase):
 class Nominee(NomineeBase):
     nomineeId: int
     model_config = {"from_attributes": True}
-    # Backwards-compatible Pydantic v1 config
-    class Config:
-        orm_mode = True
+    # Pydantic v2 model config replaces v1 Config
 
 class NomineeUpdate(BaseModel):
     name: Optional[str] = None
@@ -283,9 +275,7 @@ class ActivityCreate(ActivitiesBase):
 class Activity(ActivitiesBase):
     activityId: int
     model_config = {"from_attributes": True}
-    # Backwards-compatible Pydantic v1 config
-    class Config:
-        orm_mode = True
+    # Pydantic v2 model config replaces v1 Config
 
 # ---------- NOTIFICATIONS --------------------------------------------------------------------------
 class NotificationBase(BaseModel):
@@ -302,9 +292,7 @@ class Notification(NotificationBase):
     notificationId: int
     userId: Optional[int] = None
     model_config = {"from_attributes": True}
-    # Backwards-compatible Pydantic v1 config
-    class Config:
-        orm_mode = True
+    # Pydantic v2 model config replaces v1 Config
 
 
 #---------- PAYMENTS --------------------------------------------------------------------------
@@ -327,6 +315,4 @@ class PaymentCreate(PaymentBase):
 class Payment(PaymentBase):
     paymentId: int
     model_config = {"from_attributes": True}
-    # Backwards-compatible Pydantic v1 config
-    class Config:
-        orm_mode = True
+    # Pydantic v2 model config replaces v1 Config

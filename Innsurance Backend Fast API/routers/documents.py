@@ -78,17 +78,36 @@ def create_document(document: schemas.DocumentCreate, db: Session = Depends(get_
 
 @router.get("/", response_model=list[schemas.Document])
 def read_documents(db: Session = Depends(get_db)):
-    return crud.get_all(db, models.Documents)
+    documents = crud.get_all(db, models.Documents)
+    return [{"documentId": d.id,
+             "userId": d.userId,
+             "policyId": d.policyId,
+             "documentType": d.documentType,
+             "documentUrl": d.documentUrl,
+             "uploadDate": d.uploadDate,
+             "fileSize": d.fileSize} for d in documents]
 
 @router.get("/user/{user_id}", response_model=list[schemas.Document])
 def get_documents_by_user(user_id: int, db: Session = Depends(get_db)):
     documents = crud.get_documents_by_user(db, user_id)
-    return documents
+    return [{"documentId": d.id,
+             "userId": d.userId,
+             "policyId": d.policyId,
+             "documentType": d.documentType,
+             "documentUrl": d.documentUrl,
+             "uploadDate": d.uploadDate,
+             "fileSize": d.fileSize} for d in documents]
 
 @router.get("/policy/{policy_id}", response_model=list[schemas.Document])
 def get_documents_by_policy(policy_id: int, db: Session = Depends(get_db)):
     documents = crud.get_documents_by_policy(db, policy_id)
-    return documents
+    return [{"documentId": d.id,
+             "userId": d.userId,
+             "policyId": d.policyId,
+             "documentType": d.documentType,
+             "documentUrl": d.documentUrl,
+             "uploadDate": d.uploadDate,
+             "fileSize": d.fileSize} for d in documents]
 
 @router.get("/{document_id}", response_model=schemas.Document)
 def read_document(document_id: int, db: Session = Depends(get_db)):

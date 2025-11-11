@@ -19,7 +19,12 @@ def create_quotation(quotation: schemas.QuotationCreate, db: Session = Depends(g
 
 @router.get("/", response_model=list[schemas.Quotation])
 def read_quotations(db: Session = Depends(get_db)):
-    return crud.get_all(db, models.Quotation)
+    quotations = crud.get_all(db, models.Quotation)
+    return [{"quotationId": q.id,
+             "category": q.category,
+             "fullName": q.fullName,
+             "email": q.email,
+             "phone": q.phone} for q in quotations]
 
 
 @router.post("/request", response_model=dict)
@@ -32,7 +37,11 @@ def read_quotation(quotation_id: int, db: Session = Depends(get_db)):
     quotation = crud.get_by_id(db, models.Quotation, "id", quotation_id)
     if not quotation:
         raise HTTPException(status_code=404, detail="Quotation not found")
-    return quotation
+    return {"quotationId": quotation.id,
+            "category": quotation.category,
+            "fullName": quotation.fullName,
+            "email": quotation.email,
+            "phone": quotation.phone}
 
 @router.delete("/{quotation_id}")
 def delete_quotation(quotation_id: int, db: Session = Depends(get_db)):

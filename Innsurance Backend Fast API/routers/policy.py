@@ -19,7 +19,7 @@ def create_policy(policy: schemas.PolicyCreate, db: Session = Depends(get_db)):
     # Create a Policy record. PolicyCreate includes userId per schema.
     policy_obj = crud.create_entry(db, models.Policy, policy)
     return {
-        "id": policy_obj.id,
+        "policyId": policy_obj.id,
         "userId": getattr(policy_obj, "userId", None),
         "type": policy_obj.type,
         "planName": policy_obj.planName,
@@ -37,17 +37,59 @@ def create_policy(policy: schemas.PolicyCreate, db: Session = Depends(get_db)):
 
 @router.get("/", response_model=list[schemas.Policy])
 def read_policies(db: Session = Depends(get_db)):
-    return crud.get_all(db, models.Policy)
+    policies = crud.get_all(db, models.Policy)
+    return [{"policyId": p.id,
+             "userId": getattr(p, "userId", None),
+             "type": p.type,
+             "planName": p.planName,
+             "policyNumber": p.policyNumber,
+             "coverage": p.coverage,
+             "premium": p.premium,
+             "tenure": getattr(p, "tenure", None),
+             "startDate": p.startDate,
+             "expiryDate": p.expiryDate,
+             "benefits": p.benefits,
+             "nominee": p.nominee,
+             "nomineeId": p.nomineeId,
+             "policyDocument": p.policyDocument} for p in policies]
 
 
 @router.get("/user/{user_id}", response_model=list[schemas.Policy])
 def get_policies_by_user(user_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return crud.get_policies_by_user(db, user_id, skip, limit)
+    policies = crud.get_policies_by_user(db, user_id, skip, limit)
+    return [{"policyId": p.id,
+             "userId": getattr(p, "userId", None),
+             "type": p.type,
+             "planName": p.planName,
+             "policyNumber": p.policyNumber,
+             "coverage": p.coverage,
+             "premium": p.premium,
+             "tenure": getattr(p, "tenure", None),
+             "startDate": p.startDate,
+             "expiryDate": p.expiryDate,
+             "benefits": p.benefits,
+             "nominee": p.nominee,
+             "nomineeId": p.nomineeId,
+             "policyDocument": p.policyDocument} for p in policies]
 
 
 @router.get("/type/{policy_type}", response_model=list[schemas.Policy])
 def get_policies_by_type(policy_type: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return crud.get_policies_by_type(db, policy_type, skip, limit)
+    policies = crud.get_policies_by_type(db, policy_type, skip, limit)
+    return [{"policyId": p.id,
+             "userId": getattr(p, "userId", None),
+             "type": p.type,
+             "planName": p.planName,
+             "policyNumber": p.policyNumber,
+             "coverage": p.coverage,
+             "premium": p.premium,
+             "tenure": getattr(p, "tenure", None),
+             "startDate": p.startDate,
+             "expiryDate": p.expiryDate,
+             "benefits": p.benefits,
+             "nominee": p.nominee,
+             "nomineeId": p.nomineeId,
+             "policyDocument": p.policyDocument} for p in policies]
 
 
 @router.get("/number/{policy_number}", response_model=schemas.Policy)
@@ -55,7 +97,7 @@ def get_policy_by_number(policy_number: str, db: Session = Depends(get_db)):
     policy = crud.get_policy_by_number(db, policy_number)
     if not policy:
         raise HTTPException(status_code=404, detail="Policy not found")
-    return {"id": policy.id,
+    return {"policyId": policy.id,
             "userId": getattr(policy, "userId", None),
             "type": policy.type,
             "planName": policy.planName,
@@ -75,7 +117,7 @@ def read_policy(policy_id: int, db: Session = Depends(get_db)):
     policy = crud.get_by_id(db, models.Policy, "id", policy_id)
     if not policy:
         raise HTTPException(status_code=404, detail="Policy not found")
-    return {"id": policy.id,
+    return {"policyId": policy.id,
             "userId": getattr(policy, "userId", None),
             "type": policy.type,
             "planName": policy.planName,

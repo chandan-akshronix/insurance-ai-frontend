@@ -16,7 +16,7 @@ def get_db():
 def create_notification(notification: schemas.NotificationCreate, db: Session = Depends(get_db)):
     # Use correct model reference and return created object
     notif = crud.create_entry(db, models.Notification, notification)
-    return {"id": getattr(notif, 'id', None),
+    return {"notificationId": getattr(notif, 'id', None),
             "userId": getattr(notif, 'userId', None),
             "message": notif.message,
             "time": notif.time,
@@ -26,14 +26,22 @@ def create_notification(notification: schemas.NotificationCreate, db: Session = 
 
 @router.get("/", response_model=list[schemas.Notification])
 def read_notifications(db: Session = Depends(get_db)):
-    return crud.get_all(db, models.Notification)
+    notifs = crud.get_all(db, models.Notification)
+    return [{"notificationId": n.id,
+             "userId": getattr(n, 'userId', None),
+             "message": n.message,
+             "time": n.time,
+             "type": n.type,
+             "read": n.read,
+             "policyId": getattr(n, 'policyId', None)} for n in notifs]
 
 @router.get("/{notification_id}", response_model=schemas.Notification)
 def read_notification(notification_id: int, db: Session = Depends(get_db)):
     notification = crud.get_by_id(db, models.Notification, "id", notification_id)
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
-    return {"id": notification.id,
+    return {"notificationId": notification.id,
+            "userId": getattr(notification, 'userId', None),
             "message": notification.message,
             "time": notification.time,
             "type": notification.type,
@@ -43,7 +51,14 @@ def read_notification(notification_id: int, db: Session = Depends(get_db)):
 
 @router.get("/user/{user_id}", response_model=list[schemas.Notification])
 def get_notifications_by_user(user_id: int, unread_only: bool = False, db: Session = Depends(get_db)):
-    return crud.get_notifications_by_user(db, user_id, unread_only)
+    notifs = crud.get_notifications_by_user(db, user_id, unread_only)
+    return [{"notificationId": n.id,
+             "userId": getattr(n, 'userId', None),
+             "message": n.message,
+             "time": n.time,
+             "type": n.type,
+             "read": n.read,
+             "policyId": getattr(n, 'policyId', None)} for n in notifs]
 
 
 @router.put("/{notification_id}/read")

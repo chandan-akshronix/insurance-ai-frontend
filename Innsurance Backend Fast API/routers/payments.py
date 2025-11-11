@@ -24,31 +24,80 @@ def create_payment(payment: schemas.PaymentCreate, db: Session = Depends(get_db)
 
 @router.get("/", response_model=list[schemas.Payment])
 def read_payments(db: Session = Depends(get_db)):
-    return crud.get_all(db, models.Payments)
+    payments = crud.get_all(db, models.Payments)
+    return [{"paymentId": p.id,
+             "userId": getattr(p, "userId", None),
+             "policyId": getattr(p, "policyId", None),
+             "amount": p.amount,
+             "orderId": getattr(p, "orderId", None),
+             "paidDate": p.paidDate,
+             "paymentMethod": getattr(p, "paymentMethod", None),
+             "status": p.status,
+             "transactionId": getattr(p, "transactionId", None),
+             "returnUrl": getattr(p, "returnUrl", None),
+             "paymentUrl": getattr(p, "paymentUrl", None)} for p in payments]
 
 @router.get("/{payment_id}", response_model=schemas.Payment)
 def read_payment(payment_id: int, db: Session = Depends(get_db)):
     payment = crud.get_by_id(db, models.Payments, "id", payment_id)
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
-    
     return {"paymentId": payment.id,
-            "status": payment.status,
+            "userId": getattr(payment, "userId", None),
+            "policyId": getattr(payment, "policyId", None),
             "amount": payment.amount,
-            "transactionId": payment.transactionId,
-            "paidDate": payment.paidDate}
+            "orderId": getattr(payment, "orderId", None),
+            "paidDate": payment.paidDate,
+            "paymentMethod": getattr(payment, "paymentMethod", None),
+            "status": payment.status,
+            "transactionId": getattr(payment, "transactionId", None),
+            "returnUrl": getattr(payment, "returnUrl", None),
+            "paymentUrl": getattr(payment, "paymentUrl", None)}
 
 
 @router.get("/policy/{policy_id}", response_model=list[schemas.Payment])
 def get_payments_by_policy(policy_id: int, db: Session = Depends(get_db)):
-    return crud.get_payments_by_policy(db, policy_id)
+    payments = crud.get_payments_by_policy(db, policy_id)
+    return [{"paymentId": p.id,
+             "userId": getattr(p, "userId", None),
+             "policyId": getattr(p, "policyId", None),
+             "amount": p.amount,
+             "orderId": getattr(p, "orderId", None),
+             "paidDate": p.paidDate,
+             "paymentMethod": getattr(p, "paymentMethod", None),
+             "status": p.status,
+             "transactionId": getattr(p, "transactionId", None),
+             "returnUrl": getattr(p, "returnUrl", None),
+             "paymentUrl": getattr(p, "paymentUrl", None)} for p in payments]
 
 
 @router.get("/user/{user_id}", response_model=list[schemas.Payment])
 def get_payments_by_user(user_id: int, db: Session = Depends(get_db)):
-    return crud.get_payments_by_user(db, user_id)
+    payments = crud.get_payments_by_user(db, user_id)
+    return [{"paymentId": p.id,
+             "userId": getattr(p, "userId", None),
+             "policyId": getattr(p, "policyId", None),
+             "amount": p.amount,
+             "orderId": getattr(p, "orderId", None),
+             "paidDate": p.paidDate,
+             "paymentMethod": getattr(p, "paymentMethod", None),
+             "status": p.status,
+             "transactionId": getattr(p, "transactionId", None),
+             "returnUrl": getattr(p, "returnUrl", None),
+             "paymentUrl": getattr(p, "paymentUrl", None)} for p in payments]
 
 
 @router.get("/history/{user_id}", response_model=list[schemas.Payment])
 def get_payment_history(user_id: int, db: Session = Depends(get_db)):
-    return crud.get_payments_by_user(db, user_id)
+    payments = crud.get_payments_by_user(db, user_id)
+    return [{"paymentId": p.id,
+             "userId": getattr(p, "userId", None),
+             "policyId": getattr(p, "policyId", None),
+             "amount": p.amount,
+             "orderId": getattr(p, "orderId", None),
+             "paidDate": p.paidDate,
+             "paymentMethod": getattr(p, "paymentMethod", None),
+             "status": p.status,
+             "transactionId": getattr(p, "transactionId", None),
+             "returnUrl": getattr(p, "returnUrl", None),
+             "paymentUrl": getattr(p, "paymentUrl", None)} for p in payments]

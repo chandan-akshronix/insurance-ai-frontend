@@ -1,6 +1,11 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
+import { 
+  createUser as apiCreateUser, 
+  getUserByEmail as apiGetUserByEmail, 
+  updateUserProfile as apiUpdateUserProfile 
+} from '../services/api';
 
 interface User {
   id: string;
@@ -46,42 +51,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string, role: 'user' | 'admin' = 'user') => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Mock user data
-    const mockUser: User = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1),
-      email,
-      phone: '+91 98765 43210',
-      role,
-      dateOfBirth: '1990-01-15',
-      gender: 'Male',
-      address: '123, MG Road',
-      city: 'Bangalore',
-      state: 'Karnataka',
-      pincode: '560001'
-    };
-
-    setUser(mockUser);
-    localStorage.setItem('user', JSON.stringify(mockUser));
-    toast.success('Login successful!');
+    try {
+      const backendUser = await apiGetUserByEmail(email);
+      const uiUser: User = {
+        id: String(backendUser.id),
+        name: backendUser.name,
+        email: backendUser.email,
+        phone: backendUser.phone,
+        role,
+        dateOfBirth: backendUser.dateOfBirth,
+        gender: backendUser.gender,
+        address: backendUser.address,
+      };
+      setUser(uiUser);
+      localStorage.setItem('user', JSON.stringify(uiUser));
+      toast.success('Login successful!');
+    } catch (e) {
+      toast.error('Invalid credentials or user not found');
+      throw e;
+    }
   };
 
   const register = async (name: string, email: string, password: string) => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    const mockUser: User = {
-      id: Math.random().toString(36).substr(2, 9),
+    // Backend requires full profile; use minimal sensible defaults
+    const today = new Date().toISOString().slice(0, 10);
+    await apiCreateUser({
       name,
       email,
-      role: 'user'
+      phone: '+910000000000',
+      address: 'Address not provided',
+      dateOfBirth: '1990-01-01',
+      gender: 'Male',
+      panCard: 'AAAAA0000A',
+      aadhar: '000000000000',
+      joinedDate: today,
+      kycStatus: 'pending',
+      profileImage: null
+    });
+    // Fetch created user to populate session
+    const backendUser = await apiGetUserByEmail(email);
+    const uiUser: User = {
+      id: String(backendUser.id),
+      name: backendUser.name,
+      email: backendUser.email,
+      phone: backendUser.phone,
+      role: 'user',
+      dateOfBirth: backendUser.dateOfBirth,
+      gender: backendUser.gender,
+      address: backendUser.address,
     };
-
-    setUser(mockUser);
-    localStorage.setItem('user', JSON.stringify(mockUser));
+    setUser(uiUser);
+    localStorage.setItem('user', JSON.stringify(uiUser));
     toast.success('Registration successful!');
   };
 
@@ -93,10 +113,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateUser = async (userData: Partial<User>) => {
     if (!user) return;
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
+    const userId = Number(user.id);
+    await apiUpdateUserProfile(userId, {
+      name: userData.name,
+      phone: userData.phone,
+      address: userData.address
+    });
     const updatedUser = { ...user, ...userData };
     setUser(updatedUser);
     localStorage.setItem('user', JSON.stringify(updatedUser));

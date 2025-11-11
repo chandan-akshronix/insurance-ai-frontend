@@ -20,29 +20,58 @@ def create_claim(claim: schemas.ClaimCreate, db: Session = Depends(get_db)):
 @router.get("/", response_model=list[schemas.Claim])
 def read_claims(db: Session = Depends(get_db)):
     # Support pagination
-    return crud.get_all(db, models.Claim)
+    claims = crud.get_all(db, models.Claim)
+    return [{"claimId": c.id,
+             "userId": c.userId,
+             "policyId": c.policyId,
+             "claimType": c.claimType,
+             "amount": c.amount,
+             "status": c.status} for c in claims]
 
 
 @router.get("/user/{user_id}", response_model=list[schemas.Claim])
 def get_claims_by_user(user_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return crud.get_claims_by_user(db, user_id, skip, limit)
+    claims = crud.get_claims_by_user(db, user_id, skip, limit)
+    return [{"claimId": c.id,
+             "userId": c.userId,
+             "policyId": c.policyId,
+             "claimType": c.claimType,
+             "amount": c.amount,
+             "status": c.status} for c in claims]
 
 
 @router.get("/policy/{policy_id}", response_model=list[schemas.Claim])
 def get_claims_by_policy(policy_id: int, db: Session = Depends(get_db)):
-    return crud.get_claims_by_policy(db, policy_id)
+    claims = crud.get_claims_by_policy(db, policy_id)
+    return [{"claimId": c.id,
+             "userId": c.userId,
+             "policyId": c.policyId,
+             "claimType": c.claimType,
+             "amount": c.amount,
+             "status": c.status} for c in claims]
 
 
 @router.get("/status/{status}", response_model=list[schemas.Claim])
 def get_claims_by_status(status: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return crud.get_claims_by_status(db, status, skip, limit)
+    claims = crud.get_claims_by_status(db, status, skip, limit)
+    return [{"claimId": c.id,
+             "userId": c.userId,
+             "policyId": c.policyId,
+             "claimType": c.claimType,
+             "amount": c.amount,
+             "status": c.status} for c in claims]
 
 @router.get("/{claim_id}", response_model=schemas.Claim)
 def read_claim(claim_id: int, db: Session = Depends(get_db)):
     claim = crud.get_by_id(db, models.Claim, "id", claim_id)
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
-    return claim
+    return {"claimId": claim.id,
+            "userId": claim.userId,
+            "policyId": claim.policyId,
+            "claimType": claim.claimType,
+            "amount": claim.amount,
+            "status": claim.status}
 
 @router.delete("/{claim_id}")
 def delete_claim(claim_id: int, db: Session = Depends(get_db)):

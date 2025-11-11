@@ -62,7 +62,19 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
 # -------------------- GET ALL USERS --------------------
 @router.get("/", response_model=list[schemas.User])
 def read_users(db: Session = Depends(get_db)):
-    return crud.get_all(db, models.User)
+    users = crud.get_all(db, models.User)
+    return [{"userId": user.id,
+             "name": user.name,
+             "email": user.email,
+             "phone": user.phone,
+             "address": user.address,
+             "dateOfBirth": user.dateOfBirth,
+             "gender": user.gender,
+             "panCard": user.panCard,
+             "aadhar": user.aadhar,
+             "joinedDate": user.joinedDate,
+             "kycStatus": user.kycStatus,
+             "profileImage": user.profileImage} for user in users]
 
 
 # -------------------- GET USER BY ID --------------------
@@ -113,7 +125,18 @@ def get_user_by_email(email: str, db: Session = Depends(get_db)):
     user = crud.get_user_by_email(db, email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return user
+    return {"userId": user.id,
+            "name": user.name,
+            "email": user.email,
+            "phone": user.phone,
+            "address": user.address,
+            "dateOfBirth": user.dateOfBirth,
+            "gender": user.gender,
+            "panCard": user.panCard,
+            "aadhar": user.aadhar,
+            "joinedDate": user.joinedDate,
+            "kycStatus": user.kycStatus,
+            "profileImage": user.profileImage}
 
 
 @router.get("/phone/{phone}", response_model=schemas.User)
@@ -121,7 +144,18 @@ def get_user_by_phone(phone: str, db: Session = Depends(get_db)):
     user = crud.get_user_by_phone(db, phone)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return user
+    return {"userId": user.id,
+            "name": user.name,
+            "email": user.email,
+            "phone": user.phone,
+            "address": user.address,
+            "dateOfBirth": user.dateOfBirth,
+            "gender": user.gender,
+            "panCard": user.panCard,
+            "aadhar": user.aadhar,
+            "joinedDate": user.joinedDate,
+            "kycStatus": user.kycStatus,
+            "profileImage": user.profileImage}
 
 
 @router.get("/{userId}/policies", response_model=list[schemas.Policy])

@@ -19,19 +19,33 @@ def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)
 
 @router.get("/", response_model=list[schemas.Product])
 def read_products(db: Session = Depends(get_db)):
-    return crud.get_all(db, models.Product)
+    products = crud.get_all(db, models.Product)
+    return [{"productId": p.id,
+             "category": p.category,
+             "name": p.name,
+             "description": p.description,
+             "price": p.price} for p in products]
 
 
 @router.get("/category/{category}", response_model=list[schemas.Product])
 def get_products_by_category(category: str, db: Session = Depends(get_db)):
-    return crud.get_products_by_category(db, category)
+    products = crud.get_products_by_category(db, category)
+    return [{"productId": p.id,
+             "category": p.category,
+             "name": p.name,
+             "description": p.description,
+             "price": p.price} for p in products]
 
 @router.get("/{product_id}", response_model=schemas.Product)
 def read_product(product_id: int, db: Session = Depends(get_db)):
     product = crud.get_by_id(db, models.Product, "id", product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    return product
+    return {"productId": product.id,
+            "category": product.category,
+            "name": product.name,
+            "description": product.description,
+            "price": product.price}
 
 @router.delete("/{product_id}")
 def delete_product(product_id: int, db: Session = Depends(get_db)):
