@@ -4,7 +4,8 @@ import { toast } from 'sonner';
 import { 
   createUser as apiCreateUser, 
   getUserByEmail as apiGetUserByEmail, 
-  updateUserProfile as apiUpdateUserProfile 
+  updateUserProfile as apiUpdateUserProfile,
+  login as apiLogin
 } from '../services/api';
 
 interface User {
@@ -52,22 +53,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string, role: 'user' | 'admin' = 'user') => {
     try {
-      const backendUser = await apiGetUserByEmail(email);
+      // Call real login endpoint with password verification
+      const response = await apiLogin(email, password);
+      
       const uiUser: User = {
-        id: String(backendUser.id),
-        name: backendUser.name,
-        email: backendUser.email,
-        phone: backendUser.phone,
-        role,
-        dateOfBirth: backendUser.dateOfBirth,
-        gender: backendUser.gender,
-        address: backendUser.address,
+        id: String(response.userId),
+        name: response.name,
+        email: response.email,
+        phone: response.phone,
+        role: response.role || role,  // Use role from backend or fallback
       };
+      
       setUser(uiUser);
       localStorage.setItem('user', JSON.stringify(uiUser));
       toast.success('Login successful!');
-    } catch (e) {
-      toast.error('Invalid credentials or user not found');
+    } catch (e: any) {
+      // API returns 401 for invalid credentials
+      if (e.status === 401) {
+        toast.error('Invalid email or password');
+      } else {
+        toast.error('Login failed. Please try again.');
+      }
       throw e;
     }
   };
@@ -78,6 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await apiCreateUser({
       name,
       email,
+      password,  // ✅ CRITICAL: Send password for authentication
       phone: '+910000000000',
       address: 'Address not provided',
       dateOfBirth: '1990-01-01',

@@ -687,6 +687,7 @@ export async function getUserByEmail(email: string) {
 export interface UserCreatePayload {
   name: string;
   email: string;
+  password: string;  // Required for authentication
   phone: string;
   address: string;
   dateOfBirth: string; // YYYY-MM-DD
@@ -828,6 +829,17 @@ export async function getPaymentHistory(userId?: number | string) {
   return { payments: data.map(mapPayment) };
 }
 
+// ==================== AUTHENTICATION APIs ====================
+
+export async function login(email: string, password: string) {
+  const data = await request<any>(`/auth/login`, {
+    method: 'POST',
+    body: { email, password },
+    skipAuth: true  // Don't send auth token for login request
+  });
+  return data;
+}
+
 export const api = {
   getUserProfile,
   updateUserProfile,
@@ -856,4 +868,5 @@ export const api = {
   initiatePayment,
   getPaymentStatus,
   getPaymentHistory,
+  login,
 };
