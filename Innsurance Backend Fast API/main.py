@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
-from routers import users, policy, claims, products, contact, quotation, documents, nominee, activities, notifications, payments
+from routers import users, policy, claims, products, contact, quotation, documents, nominee, activities, notifications, payments, auth, public
 from models import *
 import os
 from dotenv import load_dotenv
@@ -28,6 +28,8 @@ app.add_middleware(
 Base.metadata.create_all(bind=engine)
 
 # Include routers
+app.include_router(public.router)  # Public endpoints (no auth required)
+app.include_router(auth.router)  # Authentication endpoints
 app.include_router(users.router)
 app.include_router(policy.router)
 app.include_router(claims.router)
