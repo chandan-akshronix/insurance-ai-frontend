@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 import schemas, models, crud
 from database import SessionLocal
+from utils.auth import hash_password
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -37,10 +38,25 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         }
 
     try:
-        user_id = crud.create_entry(db, models.User, user, return_id=True)
+        # Hash the password before storing
+        user_dict = user.model_dump()
+        user_dict['password'] = hash_password(user.password)
+        
+        # Auto-set joinedDate if not provided
+        if not user_dict.get('joinedDate'):
+            from datetime import date as date_type
+            user_dict['joinedDate'] = date_type.today()
+        
+        # Create user with hashed password
+        new_user = models.User(**user_dict)
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+        
         return {
             "success": True,
             "message": "User created successfully",
+            "userId": new_user.id
         }
 
     except IntegrityError:

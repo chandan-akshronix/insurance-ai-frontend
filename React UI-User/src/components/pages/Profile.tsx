@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Mail, Phone, MapPin, Calendar, Shield, Bell, Lock, Camera, Save, Edit2, X, Check, FileText, CreditCard } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Calendar, Shield, Bell, Lock, Camera, Save, Edit2, X, Check, FileText, CreditCard, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -14,6 +14,7 @@ import { Badge } from '../ui/badge';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner@2.0.3';
 import { motion } from 'motion/react';
+import { getUserPolicies, getUserClaims } from '../../services/api';
 
 interface Policy {
   id: string;
@@ -37,6 +38,12 @@ export default function Profile() {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // API data states
+  const [policies, setPolicies] = useState<Policy[]>([]);
+  const [claims, setClaims] = useState<Claim[]>([]);
+  const [loadingPolicies, setLoadingPolicies] = useState(true);
+  const [loadingClaims, setLoadingClaims] = useState(true);
 
   const [formData, setFormData] = useState({
     name: user?.name || '',
@@ -67,49 +74,58 @@ export default function Profile() {
     newsletter: true
   });
 
-  const mockPolicies: Policy[] = [
-    {
-      id: '1',
-      type: 'Health Insurance',
-      policyNumber: 'HLT2024001234',
-      status: 'Active',
-      expiryDate: '2025-03-15',
-      premium: '₹15,000/year'
-    },
-    {
-      id: '2',
-      type: 'Car Insurance',
-      policyNumber: 'CAR2024005678',
-      status: 'Active',
-      expiryDate: '2025-06-20',
-      premium: '₹8,500/year'
-    },
-    {
-      id: '3',
-      type: 'Life Insurance',
-      policyNumber: 'LIF2023009876',
-      status: 'Active',
-      expiryDate: '2045-01-10',
-      premium: '₹25,000/year'
-    }
-  ];
+  // Fetch policies and claims on component mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoadingPolicies(true);
+        const policiesData = await getUserPolicies();
+        
+        // Map API data to component interface
+        const mappedPolicies: Policy[] = (policiesData.policies || []).map((p: any) => ({
+          id: String(p.id),
+          type: p.type,
+          policyNumber: p.policyNumber,
+          status: p.status,
+          expiryDate: p.expiryDate,
+          premium: p.premium
+        }));
+        
+        setPolicies(mappedPolicies);
+      } catch (error) {
+        console.error('Error fetching policies:', error);
+        toast.error('Failed to load policies');
+      } finally {
+        setLoadingPolicies(false);
+      }
+    };
 
-  const mockClaims: Claim[] = [
-    {
-      id: 'CLM2024001',
-      type: 'Health',
-      date: '2024-09-15',
-      status: 'Approved',
-      amount: '₹45,000'
-    },
-    {
-      id: 'CLM2024002',
-      type: 'Car',
-      date: '2024-10-03',
-      status: 'Processing',
-      amount: '₹18,500'
-    }
-  ];
+    const fetchClaims = async () => {
+      try {
+        setLoadingClaims(true);
+        const claimsData = await getUserClaims();
+        
+        // Map API data to component interface
+        const mappedClaims: Claim[] = (claimsData.claims || []).map((c: any) => ({
+          id: String(c.id || c.claimNumber),
+          type: c.type,
+          date: c.submittedDate || '',
+          status: c.status,
+          amount: c.amount
+        }));
+        
+        setClaims(mappedClaims);
+      } catch (error) {
+        console.error('Error fetching claims:', error);
+        toast.error('Failed to load claims');
+      } finally {
+        setLoadingClaims(false);
+      }
+    };
+
+    fetchData();
+    fetchClaims();
+  }, []);
 
   const getInitials = (name: string) => {
     return name
@@ -418,7 +434,22 @@ export default function Profile() {
                 <CardDescription>View and manage your insurance policies</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {mockPolicies.map((policy) => (
+                {loadingPolicies ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    <span className="ml-3 text-muted-foreground">Loading policies...</span>
+                  </div>
+                ) : policies.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Shield className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-medium mb-2">No Policies Found</h3>
+                    <p className="text-muted-foreground mb-4">You don't have any active policies yet.</p>
+                    <Button onClick={() => navigate('/life-insurance')}>
+                      Browse Insurance Plans
+                    </Button>
+                  </div>
+                ) : (
+                  policies.map((policy) => (
                   <Card key={policy.id} className="border-2">
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between">
@@ -448,7 +479,8 @@ export default function Profile() {
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                  ))
+                )}
               </CardContent>
             </Card>
 
@@ -458,7 +490,23 @@ export default function Profile() {
                 <CardDescription>Track your insurance claims</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {mockClaims.map((claim) => (
+                {loadingClaims ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    <span className="ml-3 text-muted-foreground">Loading claims...</span>
+                  </div>
+                ) : claims.length === 0 ? (
+                  <div className="text-center py-12">
+                    <FileText className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-medium mb-2">No Claims Found</h3>
+                    <p className="text-muted-foreground mb-4">You haven't submitted any claims yet.</p>
+                    <Button onClick={() => navigate('/claims/submit')}>
+                      Submit a Claim
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    {claims.map((claim) => (
                   <div key={claim.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center gap-4">
                       <FileText className="w-5 h-5 text-primary" />
@@ -474,14 +522,16 @@ export default function Profile() {
                       </Badge>
                     </div>
                   </div>
-                ))}
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => navigate('/claims/track')}
-                >
-                  View All Claims
-                </Button>
+                    ))}
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => navigate('/claims/track')}
+                    >
+                      View All Claims
+                    </Button>
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

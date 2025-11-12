@@ -1,59 +1,57 @@
-import { useState } from 'react';
-import { ArrowRight, Check, Filter, SlidersHorizontal } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowRight, Check, Filter, SlidersHorizontal, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Slider } from '../ui/slider';
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
 import { Progress } from '../ui/progress';
 import { useNavigate } from 'react-router-dom';
+import { getProducts } from '../../services/api';
+import { toast } from 'sonner@2.0.3';
 
 const steps = ['Product Details', 'Compare Plans', 'Customize', 'KYC', 'Payment'];
 
-const plans = [
-  {
-    id: 1,
-    provider: 'HDFC Life',
-    name: 'Click 2 Protect Plus',
-    premium: 850,
-    coverage: 5000000,
-    features: ['Life cover', 'Tax benefits', 'Online claim'],
-    rating: 4.5
-  },
-  {
-    id: 2,
-    provider: 'ICICI Prudential',
-    name: 'iProtect Smart',
-    premium: 920,
-    coverage: 5000000,
-    features: ['Life cover', 'Accidental death', 'Tax benefits', 'Online claim'],
-    rating: 4.7
-  },
-  {
-    id: 3,
-    provider: 'Max Life',
-    name: 'Smart Secure Plus',
-    premium: 780,
-    coverage: 5000000,
-    features: ['Life cover', 'Critical illness', 'Tax benefits'],
-    rating: 4.3
-  },
-  {
-    id: 4,
-    provider: 'SBI Life',
-    name: 'eShield',
-    premium: 810,
-    coverage: 5000000,
-    features: ['Life cover', 'Tax benefits', 'Flexible tenure'],
-    rating: 4.4
-  }
-];
-
 export default function Quotes() {
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedPlan, setSelectedPlan] = useState<number | null>(null);
   const [premiumRange, setPremiumRange] = useState([500, 2000]);
   const [sortBy, setSortBy] = useState('price');
-  const navigate = useNavigate();
+  
+  // Products/Plans state
+  const [plans, setPlans] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch products on component mount
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        setLoading(true);
+        const data = await getProducts();
+        
+        // Map products to plan format expected by component
+        const mappedPlans = (data || []).map((product: any) => ({
+          id: product.productId || product.id,
+          provider: product.provider || 'SecureInsure',
+          name: product.name,
+          premium: product.price || product.premium || 0,
+          coverage: product.coverage || 5000000,
+          features: Array.isArray(product.features) ? product.features : ['Insurance cover', 'Tax benefits'],
+          rating: product.rating || 4.5
+        }));
+        
+        setPlans(mappedPlans);
+      } catch (error) {
+        console.error('Error fetching products:', error);
+        toast.error('Failed to load insurance plans');
+        // Keep empty array on error
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
 
   const filteredPlans = plans
     .filter(plan => plan.premium >= premiumRange[0] && plan.premium <= premiumRange[1])
@@ -199,25 +197,41 @@ export default function Quotes() {
               <div className="p-6 border-b">
                 <h2>Compare Insurance Plans</h2>
                 <p className="text-gray-600 mt-2">
-                  Found {filteredPlans.length} plans matching your criteria
+                  {loading ? 'Loading plans...' : `Found ${filteredPlans.length} plans matching your criteria`}
                 </p>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-[#001F3F] text-white">
-                    <tr>
-                      <th className="p-4 text-left">Provider</th>
-                      <th className="p-4 text-left">Plan Name</th>
-                      <th className="p-4 text-left">Monthly Premium</th>
-                      <th className="p-4 text-left">Coverage</th>
-                      <th className="p-4 text-left">Features</th>
-                      <th className="p-4 text-left">Rating</th>
-                      <th className="p-4 text-left">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredPlans.map((plan) => (
+              {loading ? (
+                <div className="flex items-center justify-center py-24">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  <span className="ml-3 text-muted-foreground">Loading insurance plans...</span>
+                </div>
+              ) : filteredPlans.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-24">
+                  <Filter className="w-16 h-16 text-muted-foreground mb-4" />
+                  <h3 className="text-xl font-medium mb-2">No Plans Found</h3>
+                  <p className="text-muted-foreground text-center mb-4">
+                    {plans.length === 0 
+                      ? 'No insurance products available at the moment.' 
+                      : 'Try adjusting your filters to see more plans.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-[#001F3F] text-white">
+                      <tr>
+                        <th className="p-4 text-left">Provider</th>
+                        <th className="p-4 text-left">Plan Name</th>
+                        <th className="p-4 text-left">Monthly Premium</th>
+                        <th className="p-4 text-left">Coverage</th>
+                        <th className="p-4 text-left">Features</th>
+                        <th className="p-4 text-left">Rating</th>
+                        <th className="p-4 text-left">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredPlans.map((plan) => (
                       <tr
                         key={plan.id}
                         className={`border-b hover:bg-gray-50 ${
@@ -257,10 +271,11 @@ export default function Quotes() {
                           </Button>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               <div className="p-6 border-t bg-gray-50">
                 <div className="flex justify-between items-center">

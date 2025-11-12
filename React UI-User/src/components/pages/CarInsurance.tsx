@@ -233,7 +233,8 @@ export default function CarInsurance() {
         coverage: coverage?.name || '',
         features: coverage?.features || [],
         addOns: formData.selectedAddOns.length,
-        savings: Math.round(Math.random() * 3000) // Mock savings
+        // Calculate savings as 10% of base premium (typical online discount)
+        savings: Math.round(basePremium * 0.1)
       };
     });
   };

@@ -59,15 +59,16 @@ class UserBase(BaseModel):
     gender: str
     panCard: str
     aadhar: str
-    joinedDate: date
     kycStatus: KycStatus
     profileImage: Optional[str] = None
 
 class UserCreate(UserBase):
-    pass
+    password: str  # Plain password - will be hashed before storing
+    joinedDate: Optional[date] = None  # Optional - will be auto-set if not provided
 
 class User(UserBase):
     userId: int
+    joinedDate: date  # Add back for response
     model_config = {"from_attributes": True}
 
 class UserUpdate(BaseModel):

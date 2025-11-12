@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Check, Upload, X, FileText, AlertCircle, ArrowRight, CheckCircle, Camera, Clock, Info, Award, Home, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Check, Upload, X, FileText, AlertCircle, ArrowRight, CheckCircle, Camera, Clock, Info, Award, Home, Download, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -14,6 +14,7 @@ import { toast } from 'sonner@2.0.3';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { Separator } from '../ui/separator';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
+import { getUserPolicies, submitClaim } from '../../services/api';
 
 interface UploadedFile {
   id: string;
@@ -24,11 +25,7 @@ interface UploadedFile {
   preview?: string;
 }
 
-const mockPolicies = [
-  { id: 'CAR001', policyNumber: 'CAR/2024/001', vehicle: 'Audi', brand: 'Audi', model: 'All', year: '2018', registrationNumber: 'AGP1844566', expiryDate: '24/10/2023', insurer: 'Bajaj Allianz', vehicleType: 'Zero Depreciation' },
-  { id: 'CAR002', policyNumber: 'CAR/2024/002', vehicle: 'Maruti Suzuki Swift', brand: 'Maruti Suzuki', model: 'Swift', year: '2022', registrationNumber: 'MH01AB1234', expiryDate: '2025-08-20', insurer: 'ICICI Lombard', vehicleType: 'Comprehensive' }
-];
-
+// Static reference data - keeping these as-is
 const networkGarages = [
   { id: 'WS001', name: 'AutoCare Service Center', location: 'Andheri West, Mumbai', rating: 4.5, distance: '2.3 km' },
   { id: 'WS002', name: 'Premium Motors Workshop', location: 'Bandra East, Mumbai', rating: 4.7, distance: '4.1 km' },
@@ -64,6 +61,33 @@ export default function CarClaim() {
   const [step, setStep] = useState(1);
   const [claimNumber, setClaimNumber] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  
+  // Car policies state
+  const [policies, setPolicies] = useState<any[]>([]);
+  const [loadingPolicies, setLoadingPolicies] = useState(true);
+
+  // Fetch car policies on component mount
+  useEffect(() => {
+    const fetchPolicies = async () => {
+      try {
+        setLoadingPolicies(true);
+        const data = await getUserPolicies();
+        // Filter for only car/vehicle insurance policies
+        const carPolicies = (data.policies || []).filter((p: any) => 
+          p.type?.toLowerCase().includes('vehicle') || 
+          p.type?.toLowerCase().includes('car')
+        );
+        setPolicies(carPolicies);
+      } catch (error) {
+        console.error('Error fetching car policies:', error);
+        toast.error('Failed to load car insurance policies');
+      } finally {
+        setLoadingPolicies(false);
+      }
+    };
+
+    fetchPolicies();
+  }, []);
   const [formData, setFormData] = useState({
     selectedPolicy: '',
     incidentType: '',
@@ -225,7 +249,7 @@ export default function CarClaim() {
     setStep(11);
   };
 
-  const selectedPolicy = mockPolicies.find(p => p.id === formData.selectedPolicy);
+  const selectedPolicy = policies.find(p => p.id === formData.selectedPolicy);
 
   const damageAreas = [
     { id: 'front', label: 'Front Bumper/Hood' },
@@ -273,11 +297,25 @@ export default function CarClaim() {
                             <SelectValue placeholder="All" />
                           </SelectTrigger>
                           <SelectContent>
-                            {mockPolicies.map((policy) => (
+                            {loadingPolicies ? (
+                              <div className="flex items-center justify-center py-8">
+                                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                                <span className="ml-2 text-sm text-muted-foreground">Loading car policies...</span>
+                              </div>
+                            ) : policies.length === 0 ? (
+                              <div className="text-center py-8">
+                                <p className="text-muted-foreground mb-4">No car insurance policies found</p>
+                                <Button variant="outline" onClick={() => navigate('/car-insurance')}>
+                                  Get Car Insurance
+                                </Button>
+                              </div>
+                            ) : (
+                              policies.map((policy) => (
                               <SelectItem key={policy.id} value={policy.id}>
-                                {policy.brand} {policy.model}
+                                {policy.planName || `${policy.type} - ${policy.policyNumber}`}
                               </SelectItem>
-                            ))}
+                              ))
+                            )}
                           </SelectContent>
                         </Select>
                       </div>

@@ -1,6 +1,16 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+<<<<<<< Updated upstream
 import { toast } from 'sonner@2.0.3';
+=======
+import { toast } from 'sonner';
+import { 
+  createUser as apiCreateUser, 
+  getUserByEmail as apiGetUserByEmail, 
+  updateUserProfile as apiUpdateUserProfile,
+  login as apiLogin
+} from '../services/api';
+>>>>>>> Stashed changes
 
 interface User {
   id: string;
@@ -46,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string, role: 'user' | 'admin' = 'user') => {
+<<<<<<< Updated upstream
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -67,6 +78,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(mockUser);
     localStorage.setItem('user', JSON.stringify(mockUser));
     toast.success('Login successful!');
+=======
+    try {
+      // Call real login endpoint with password verification
+      const response = await apiLogin(email, password);
+      
+      const uiUser: User = {
+        id: String(response.userId),
+        name: response.name,
+        email: response.email,
+        phone: response.phone,
+        role: response.role || role,  // Use role from backend or fallback
+      };
+      
+      setUser(uiUser);
+      localStorage.setItem('user', JSON.stringify(uiUser));
+      toast.success('Login successful!');
+    } catch (e: any) {
+      // API returns 401 for invalid credentials
+      if (e.status === 401) {
+        toast.error('Invalid email or password');
+      } else {
+        toast.error('Login failed. Please try again.');
+      }
+      throw e;
+    }
+>>>>>>> Stashed changes
   };
 
   const register = async (name: string, email: string, password: string) => {
@@ -77,7 +114,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       id: Math.random().toString(36).substr(2, 9),
       name,
       email,
+<<<<<<< Updated upstream
       role: 'user'
+=======
+      password,  // ✅ NOW SENDING PASSWORD
+      phone: '+910000000000',
+      address: 'Address not provided',
+      dateOfBirth: '1990-01-01',
+      gender: 'Male',
+      panCard: 'AAAAA0000A',
+      aadhar: '000000000000',
+      joinedDate: today,
+      kycStatus: 'pending',
+      profileImage: null
+    });
+    // Fetch created user to populate session
+    const backendUser = await apiGetUserByEmail(email);
+    const uiUser: User = {
+      id: String(backendUser.id),
+      name: backendUser.name,
+      email: backendUser.email,
+      phone: backendUser.phone,
+      role: 'user',
+      dateOfBirth: backendUser.dateOfBirth,
+      gender: backendUser.gender,
+      address: backendUser.address,
+>>>>>>> Stashed changes
     };
 
     setUser(mockUser);

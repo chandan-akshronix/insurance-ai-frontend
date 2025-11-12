@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
-from routers import users, policy, claims, products, contact, quotation, documents, nominee, activities, notifications, payments
-from models import *
+from routers import users, policy, claims, products, contact, quotation, documents, nominee, activities, notifications, payments, auth
+import models  # Import models module explicitly
 import os
 from dotenv import load_dotenv
 
@@ -13,7 +13,7 @@ app = FastAPI(title="Insurance Management Backend")
 # CORS Configuration
 cors_origins = os.getenv(
     "CORS_ORIGINS",
-    "http://localhost:3000,http://127.0.0.1:3000"
+    "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173"
 ).split(",")
 
 app.add_middleware(
@@ -24,10 +24,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Import all models to register them with Base.metadata
+from models import (
+    User, Policy, PolicyPurchase, Claim, Product, 
+    Contact, Quotation, Documents, Nominee, Activities, 
+    Notification, Payments
+)
+
 # Create all tables
+print("Creating database tables...")
 Base.metadata.create_all(bind=engine)
+print("Database tables created successfully!")
 
 # Include routers
+app.include_router(auth.router)  # Authentication endpoints
 app.include_router(users.router)
 app.include_router(policy.router)
 app.include_router(claims.router)

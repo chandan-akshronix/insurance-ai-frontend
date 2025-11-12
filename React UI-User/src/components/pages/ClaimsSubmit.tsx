@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Check, Upload, X, FileText, Image as ImageIcon, AlertCircle, Calendar, MapPin, User, Phone, Mail, CreditCard, ArrowLeft, ArrowRight, CheckCircle, Heart, Car, Activity, Plus, Info, Building2, Stethoscope, Clock, Download, Camera, Briefcase, Shield, Award } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Check, Upload, X, FileText, Image as ImageIcon, AlertCircle, Calendar, MapPin, User, Phone, Mail, CreditCard, ArrowLeft, ArrowRight, CheckCircle, Heart, Car, Activity, Plus, Info, Building2, Stethoscope, Clock, Download, Camera, Briefcase, Shield, Award, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -14,6 +14,7 @@ import { toast } from 'sonner@2.0.3';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { Checkbox } from '../ui/checkbox';
 import { Separator } from '../ui/separator';
+import { getUserPolicies, submitClaim } from '../../services/api';
 
 interface UploadedFile {
   id: string;
@@ -24,25 +25,41 @@ interface UploadedFile {
   preview?: string;
 }
 
-const mockPolicies = {
-  health: [
-    { id: 'HLT001', name: 'Health Shield Plus', policyNumber: 'HLT/2024/001', sumInsured: '₹5 Lakhs', expiryDate: '2025-12-31', insurer: 'HDFC ERGO' },
-    { id: 'HLT002', name: 'Family Floater', policyNumber: 'HLT/2024/002', sumInsured: '₹10 Lakhs', expiryDate: '2025-10-15', insurer: 'Star Health' }
-  ],
-  life: [
-    { id: 'LIF001', name: 'Term Life 50L', policyNumber: 'LIF/2023/001', sumInsured: '₹50 Lakhs', expiryDate: '2043-06-30', insurer: 'ICICI Prudential' }
-  ],
-  car: [
-    { id: 'CAR001', name: 'Comprehensive Car', policyNumber: 'CAR/2024/001', vehicle: 'MH01AB1234', sumInsured: '₹8 Lakhs', expiryDate: '2025-08-20', insurer: 'Bajaj Allianz' }
-  ]
-};
-
 export default function ClaimsSubmit() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [claimType, setClaimType] = useState<'health' | 'life' | 'car' | ''>('');
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [claimNumber, setClaimNumber] = useState('');
+  
+  // Policies state
+  const [allPolicies, setAllPolicies] = useState<any[]>([]);
+  const [loadingPolicies, setLoadingPolicies] = useState(true);
+  
+  // Organize policies by type
+  const policies = {
+    health: allPolicies.filter(p => p.type?.toLowerCase().includes('health')),
+    life: allPolicies.filter(p => p.type?.toLowerCase().includes('life')),
+    car: allPolicies.filter(p => p.type?.toLowerCase().includes('vehicle') || p.type?.toLowerCase().includes('car'))
+  };
+
+  // Fetch policies on component mount
+  useEffect(() => {
+    const fetchPolicies = async () => {
+      try {
+        setLoadingPolicies(true);
+        const data = await getUserPolicies();
+        setAllPolicies(data.policies || []);
+      } catch (error) {
+        console.error('Error fetching policies:', error);
+        toast.error('Failed to load policies');
+      } finally {
+        setLoadingPolicies(false);
+      }
+    };
+
+    fetchPolicies();
+  }, []);
   const [formData, setFormData] = useState({
     // Step 1: Claim Type & Policy
     selectedPolicy: '',
@@ -276,7 +293,7 @@ export default function ClaimsSubmit() {
     setStep(8); // Confirmation step
   };
 
-  const selectedPolicy = claimType ? mockPolicies[claimType].find(p => p.id === formData.selectedPolicy) : null;
+  const selectedPolicy = claimType ? policies[claimType].find(p => p.id === formData.selectedPolicy) : null;
 
   return (
     <div className="pt-[70px] min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50">
@@ -450,7 +467,20 @@ export default function ClaimsSubmit() {
                         <CardDescription>Choose the policy for which you want to file a claim</CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        {mockPolicies[claimType].map((policy) => (
+                        {loadingPolicies ? (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                            <span className="ml-2 text-sm text-muted-foreground">Loading policies...</span>
+                          </div>
+                        ) : policies[claimType].length === 0 ? (
+                          <div className="text-center py-8">
+                            <p className="text-muted-foreground mb-4">No {claimType} insurance policies found</p>
+                            <Button variant="outline" onClick={() => navigate(`/${claimType}-insurance`)}>
+                              Get {claimType} insurance
+                            </Button>
+                          </div>
+                        ) : (
+                          policies[claimType].map((policy) => (
                           <Card
                             key={policy.id}
                             className={`cursor-pointer transition-all hover:shadow-lg ${
@@ -482,7 +512,8 @@ export default function ClaimsSubmit() {
                               </div>
                             </CardContent>
                           </Card>
-                        ))}
+                          ))
+                        )}
                       </CardContent>
                     </Card>
                   </motion.div>

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Search, Eye, Download, FileText, Clock, CheckCircle, XCircle, AlertCircle, Phone, Mail, MapPin, Calendar, User, ChevronRight, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Eye, Download, FileText, Clock, CheckCircle, XCircle, AlertCircle, Phone, Mail, MapPin, Calendar, User, ChevronRight, ExternalLink, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { motion } from 'motion/react';
 import { toast } from 'sonner@2.0.3';
+import { getUserClaims } from '../../services/api';
 
 interface ClaimDocument {
   id: string;
@@ -45,95 +46,53 @@ interface Claim {
   assignedTo?: string;
 }
 
-// Mock Claims Data
-const mockClaims: Claim[] = [
-  {
-    id: '1',
-    claimNumber: 'CLM2024001',
-    policyNumber: 'HLT/2024/001',
-    type: 'health',
-    status: 'under-review',
-    claimAmount: 125000,
-    submittedDate: '2024-10-01',
-    lastUpdate: '2024-10-12',
-    description: 'Hospitalization for appendectomy surgery',
-    claimantName: 'Rajesh Kumar',
-    claimantPhone: '+91 98765 43210',
-    claimantEmail: 'rajesh.k@email.com',
-    assignedTo: 'Dr. Priya Sharma',
-    documents: [
-      { id: 'd1', name: 'Hospital Bills.pdf', type: 'pdf', uploadDate: '2024-10-01', size: '2.4 MB' },
-      { id: 'd2', name: 'Discharge Summary.pdf', type: 'pdf', uploadDate: '2024-10-01', size: '1.1 MB' },
-      { id: 'd3', name: 'Medical Reports.pdf', type: 'pdf', uploadDate: '2024-10-01', size: '3.2 MB' }
-    ],
-    timeline: [
-      { id: 't1', status: 'Submitted', description: 'Claim submitted successfully', date: '2024-10-01', time: '10:30 AM', completed: true },
-      { id: 't2', status: 'Documents Verified', description: 'All documents verified and accepted', date: '2024-10-03', time: '02:15 PM', completed: true },
-      { id: 't3', status: 'Under Review', description: 'Medical team reviewing the claim', date: '2024-10-05', time: '11:00 AM', completed: true },
-      { id: 't4', status: 'Approval Pending', description: 'Awaiting final approval', date: '', time: '', completed: false },
-      { id: 't5', status: 'Payment Processing', description: 'Claim payment will be processed', date: '', time: '', completed: false }
-    ]
-  },
-  {
-    id: '2',
-    claimNumber: 'CLM2024002',
-    policyNumber: 'CAR/2024/001',
-    type: 'car',
-    status: 'approved',
-    claimAmount: 45000,
-    approvedAmount: 42000,
-    submittedDate: '2024-09-15',
-    lastUpdate: '2024-10-10',
-    description: 'Vehicle damage due to accident',
-    claimantName: 'Anjali Mehta',
-    claimantPhone: '+91 87654 32109',
-    claimantEmail: 'anjali.mehta@email.com',
-    assignedTo: 'Vikram Singh',
-    documents: [
-      { id: 'd4', name: 'Accident Photos.zip', type: 'zip', uploadDate: '2024-09-15', size: '8.7 MB' },
-      { id: 'd5', name: 'FIR Copy.pdf', type: 'pdf', uploadDate: '2024-09-15', size: '0.8 MB' },
-      { id: 'd6', name: 'Repair Estimate.pdf', type: 'pdf', uploadDate: '2024-09-16', size: '1.5 MB' }
-    ],
-    timeline: [
-      { id: 't6', status: 'Submitted', description: 'Claim submitted successfully', date: '2024-09-15', time: '03:45 PM', completed: true },
-      { id: 't7', status: 'Documents Verified', description: 'All documents verified', date: '2024-09-17', time: '10:20 AM', completed: true },
-      { id: 't8', status: 'Survey Completed', description: 'Vehicle inspection completed', date: '2024-09-20', time: '04:30 PM', completed: true },
-      { id: 't9', status: 'Approved', description: 'Claim approved for ₹42,000', date: '2024-10-10', time: '11:15 AM', completed: true },
-      { id: 't10', status: 'Payment Processing', description: 'Payment will be processed in 3-5 days', date: '', time: '', completed: false }
-    ]
-  },
-  {
-    id: '3',
-    claimNumber: 'CLM2024003',
-    policyNumber: 'HLT/2024/002',
-    type: 'health',
-    status: 'settled',
-    claimAmount: 85000,
-    approvedAmount: 85000,
-    submittedDate: '2024-08-20',
-    lastUpdate: '2024-09-05',
-    description: 'Dental treatment and surgery',
-    claimantName: 'Suresh Patel',
-    claimantPhone: '+91 76543 21098',
-    claimantEmail: 'suresh.p@email.com',
-    documents: [
-      { id: 'd7', name: 'Dental Bills.pdf', type: 'pdf', uploadDate: '2024-08-20', size: '1.9 MB' },
-      { id: 'd8', name: 'Treatment Records.pdf', type: 'pdf', uploadDate: '2024-08-20', size: '2.1 MB' }
-    ],
-    timeline: [
-      { id: 't11', status: 'Submitted', description: 'Claim submitted successfully', date: '2024-08-20', time: '09:00 AM', completed: true },
-      { id: 't12', status: 'Documents Verified', description: 'All documents verified', date: '2024-08-22', time: '01:30 PM', completed: true },
-      { id: 't13', status: 'Approved', description: 'Claim approved for full amount', date: '2024-08-28', time: '10:00 AM', completed: true },
-      { id: 't14', status: 'Payment Processed', description: 'Payment transferred to account', date: '2024-09-02', time: '03:00 PM', completed: true },
-      { id: 't15', status: 'Settled', description: 'Claim settled successfully', date: '2024-09-05', time: '12:00 PM', completed: true }
-    ]
-  }
-];
-
 export default function ClaimsTrack() {
+  const [claims, setClaims] = useState<Claim[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClaim, setSelectedClaim] = useState<Claim | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+
+  // Fetch claims on component mount
+  useEffect(() => {
+    const fetchClaims = async () => {
+      try {
+        setLoading(true);
+        const data = await getUserClaims();
+        
+        // Map API data to component interface - Note: API may not have all fields like timeline/documents
+        const mappedClaims: Claim[] = (data.claims || []).map((c: any) => ({
+          id: String(c.id || c.claimNumber),
+          claimNumber: c.claimNumber || `CLM-${String(c.id).padStart(6, '0')}`,
+          policyNumber: c.policyNumber || c.policyId || 'N/A',
+          type: (c.type?.toLowerCase() || 'health') as 'health' | 'life' | 'car',
+          status: (c.status?.toLowerCase() || 'submitted') as 'submitted' | 'under-review' | 'approved' | 'rejected' | 'settled',
+          claimAmount: typeof c.amount === 'string' ? parseFloat(c.amount.replace(/[^0-9.]/g, '')) : c.amount || 0,
+          approvedAmount: c.approvedAmount,
+          submittedDate: c.submittedDate || c.date || '',
+          lastUpdate: c.lastUpdate || c.submittedDate || '',
+          description: c.description || 'No description provided',
+          claimantName: c.claimantName || 'N/A',
+          claimantPhone: c.claimantPhone || 'N/A',
+          claimantEmail: c.claimantEmail || 'N/A',
+          assignedTo: c.assignedTo,
+          documents: c.documents || [],
+          timeline: c.timeline || [
+            { id: 't1', status: 'Submitted', description: 'Claim submitted', date: c.submittedDate || '', time: '', completed: true }
+          ]
+        }));
+        
+        setClaims(mappedClaims);
+      } catch (error) {
+        console.error('Error fetching claims:', error);
+        toast.error('Failed to load claims');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchClaims();
+  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -171,7 +130,7 @@ export default function ClaimsTrack() {
       toast.error('Please enter a claim number');
       return;
     }
-    const claim = mockClaims.find(c => c.claimNumber.toLowerCase().includes(searchQuery.toLowerCase()));
+    const claim = claims.find(c => c.claimNumber.toLowerCase().includes(searchQuery.toLowerCase()));
     if (claim) {
       setSelectedClaim(claim);
       setShowDetails(true);
@@ -187,11 +146,11 @@ export default function ClaimsTrack() {
   };
 
   const filteredClaims = searchQuery
-    ? mockClaims.filter(claim => 
+    ? claims.filter(claim => 
         claim.claimNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
         claim.policyNumber.toLowerCase().includes(searchQuery.toLowerCase())
       )
-    : mockClaims;
+    : claims;
 
   return (
     <div className="pt-[70px] min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50">
@@ -240,7 +199,28 @@ export default function ClaimsTrack() {
           </TabsList>
 
           <TabsContent value="all" className="space-y-4">
-            {filteredClaims.map((claim) => (
+            {loading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <span className="ml-3 text-muted-foreground">Loading claims...</span>
+              </div>
+            ) : filteredClaims.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-16">
+                  <FileText className="w-16 h-16 text-muted-foreground mb-4" />
+                  <h3 className="text-xl font-medium mb-2">No Claims Found</h3>
+                  <p className="text-muted-foreground text-center mb-6">
+                    {searchQuery ? 'No claims match your search criteria.' : 'You haven\'t submitted any claims yet.'}
+                  </p>
+                  {!searchQuery && (
+                    <Button onClick={() => window.location.href = '/claims/submit'}>
+                      Submit Your First Claim
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              filteredClaims.map((claim) => (
               <motion.div
                 key={claim.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -303,7 +283,8 @@ export default function ClaimsTrack() {
                   </CardContent>
                 </Card>
               </motion.div>
-            ))}
+              ))
+            )}
           </TabsContent>
 
           <TabsContent value="pending" className="space-y-4">

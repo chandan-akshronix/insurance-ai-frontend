@@ -215,69 +215,26 @@ export default function LifeInsurance() {
     handleFileUpload(e.dataTransfer.files);
   }, [handleFileUpload]);
 
-  // Quick start with demo data (instant)
+  // Quick start - Skip to form entry
   const quickStartWithDemoData = () => {
-    // Instantly populate with demo data
-    setFormData(prev => ({
-      ...prev,
-      fullName: 'Rajesh Kumar',
-      dob: '1990-05-15',
-      gender: 'male',
-      address: '123 MG Road, Bangalore, Karnataka - 560001',
-      panNumber: 'ABCDE1234F',
-      annualIncome: '1200000',
-      occupation: 'Software Engineer',
-      phone: user?.phone || '+91 9876543210',
-      email: user?.email || 'rajesh.kumar@email.com'
-    }));
-
-    setVerificationStatus({
-      fullName: true,
-      dob: true,
-      gender: true,
-      address: true,
-      panNumber: true
-    });
-
-    toast.success('Demo data loaded successfully!');
-    setAssistantMessage('Demo data loaded! Review and proceed through the steps.');
+    toast.info('Please fill in your details to continue.');
+    setAssistantMessage('Fill in your personal details below.');
     changeStep(3);
   };
 
-  // Simulate AI extraction (using temporary/dummy data for quick processing)
+  // AI extraction - Currently not implemented, will require OCR/AI service integration
   const processDocuments = async () => {
     setIsProcessing(true);
-    changeStep(2);
-    
-    // Very quick AI processing animation (500ms total)
     setAssistantMessage('Processing documents...');
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Mock/Temporary extracted data for quick testing
-    setFormData(prev => ({
-      ...prev,
-      fullName: 'Rajesh Kumar',
-      dob: '1990-05-15',
-      gender: 'male',
-      address: '123 MG Road, Bangalore, Karnataka - 560001',
-      panNumber: 'ABCDE1234F',
-      annualIncome: '1200000',
-      occupation: 'Software Engineer',
-      phone: user?.phone || '+91 9876543210',
-      email: user?.email || 'rajesh.kumar@email.com'
-    }));
-
-    setVerificationStatus({
-      fullName: true,
-      dob: true,
-      gender: true,
-      address: true,
-      panNumber: true
-    });
-
+    
+    // TODO: Implement real AI/OCR document processing
+    // For now, show a message that this feature requires setup
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
     setIsProcessing(false);
-    toast.success('Details extracted successfully!');
-    changeStep(3);
+    toast.info('AI document processing requires integration. Please fill the form manually.');
+    setAssistantMessage('Please fill in your details manually to continue.');
+    changeStep(3); // Skip to form entry step
   };
 
   // Calculate recommended coverage based on income

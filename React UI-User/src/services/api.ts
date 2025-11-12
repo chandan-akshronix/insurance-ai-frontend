@@ -362,6 +362,7 @@ export async function getAdminClaims() {
  * Fetches all users for admin management
  */
 export async function getAdminUsers() {
+<<<<<<< Updated upstream
   return mockApiCall({
     users: [
       {
@@ -398,6 +399,45 @@ export async function getAdminUsers() {
         kycStatus: 'pending'
       }
     ]
+=======
+  const users = await request<BackendUser[]>(`/users`);
+  return {
+    users: users.map((user) => ({
+      id: user.userId,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      kycStatus: user.kycStatus,
+      joinedDate: user.joinedDate,
+    })),
+  };
+}
+
+export async function getUserByEmail(email: string) {
+  const data = await request<BackendUser>(`/users/email/${encodeURIComponent(email)}`);
+  return mapUser(data);
+}
+
+export interface UserCreatePayload {
+  name: string;
+  email: string;
+  password: string;  // ✅ Added password field
+  phone: string;
+  address: string;
+  dateOfBirth: string; // YYYY-MM-DD
+  gender: string;
+  panCard: string;
+  aadhar: string;
+  joinedDate: string; // YYYY-MM-DD
+  kycStatus: KycStatus;
+  profileImage?: string | null;
+}
+
+export async function createUser(payload: UserCreatePayload) {
+  return request(`/users/`, {
+    method: 'POST',
+    body: payload as unknown as Record<string, unknown>,
+>>>>>>> Stashed changes
   });
 }
 
@@ -549,6 +589,7 @@ export async function getPaymentStatus(paymentId: string) {
   });
 }
 
+<<<<<<< Updated upstream
 /**
  * GET /api/payments/history
  * Fetches payment history
@@ -579,6 +620,27 @@ export async function getPaymentHistory() {
 }
 
 // Export all API functions
+=======
+export async function getProducts() {
+  const data = await request<any[]>(`/products/`);
+  return data;
+}
+
+export async function getProductsByCategory(category: string) {
+  const data = await request<any[]>(`/products/category/${category}`);
+  return data;
+}
+
+export async function login(email: string, password: string) {
+  const data = await request<any>(`/auth/login`, {
+    method: 'POST',
+    body: { email, password },
+    skipAuth: true  // Don't send auth token for login request
+  });
+  return data;
+}
+
+>>>>>>> Stashed changes
 export const api = {
   // User
   getUserProfile,
@@ -621,5 +683,12 @@ export const api = {
   // Payments
   initiatePayment,
   getPaymentStatus,
+<<<<<<< Updated upstream
   getPaymentHistory
+=======
+  getPaymentHistory,
+  getProducts,
+  getProductsByCategory,
+  login,
+>>>>>>> Stashed changes
 };
