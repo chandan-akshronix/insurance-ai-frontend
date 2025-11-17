@@ -8,6 +8,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import logging
+logger = logging.getLogger(__name__)
+
+# Log database URL (mask password) for debugging
+raw_db = os.getenv('DATABASE_URL', '')
+if raw_db:
+    try:
+        # mask password between : and @ if present
+        import re
+        masked = re.sub(r':([^:@]+)@', ':****@', raw_db)
+        logger.info('Using DATABASE_URL: %s', masked)
+    except Exception:
+        logger.info('Using DATABASE_URL (masked)')
+
 app = FastAPI(title="Insurance Management Backend")
 
 # CORS Configuration

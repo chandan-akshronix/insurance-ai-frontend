@@ -81,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (name: string, email: string, password: string) => {
     // Backend requires full profile; use minimal sensible defaults
     const today = new Date().toISOString().slice(0, 10);
-    await apiCreateUser({
+    const createRes: any = await apiCreateUser({
       name,
       email,
       password,  // ✅ CRITICAL: Send password for authentication
@@ -95,17 +95,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       kycStatus: 'pending',
       profileImage: null
     });
-    // Fetch created user to populate session
-    const backendUser = await apiGetUserByEmail(email);
+
+    // Use create response to avoid an extra GET which can fail due to timing/case
+    const createdId = createRes?.userId ?? createRes?.id ?? null;
+    const createdEmail = createRes?.email ?? email;
+
     const uiUser: User = {
-      id: String(backendUser.id),
-      name: backendUser.name,
-      email: backendUser.email,
-      phone: backendUser.phone,
+      id: String(createdId ?? ''),
+      name,
+      email: createdEmail,
+      phone: '+910000000000',
       role: 'user',
-      dateOfBirth: backendUser.dateOfBirth,
-      gender: backendUser.gender,
-      address: backendUser.address,
+      dateOfBirth: '1990-01-01',
+      gender: 'Male',
+      address: 'Address not provided',
     };
     setUser(uiUser);
     localStorage.setItem('user', JSON.stringify(uiUser));

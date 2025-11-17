@@ -21,8 +21,9 @@ engine = create_engine(
     pool_size=10,
     max_overflow=20,
     pool_recycle=3600,  # Recycle connections after 1 hour
-    echo=False  # Set to True for SQL query logging
+    echo=True  # Set to True for SQL query logging (temporary for debugging)
 )
+# NOTE: For debugging database writes you can temporarily set echo=True above
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

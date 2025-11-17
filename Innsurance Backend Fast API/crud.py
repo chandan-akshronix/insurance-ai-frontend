@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 import models, schemas
 from typing import Any, Dict, Optional, List
 
@@ -79,7 +80,11 @@ def update_by_id(db: Session, model, id_field: str, id_value: int, data: Any):
 # ------------------ Model-specific helpers ------------------
 
 def get_user_by_email(db: Session, email: str):
-    return db.query(models.User).filter(models.User.email == email).first()
+    if not email:
+        return None
+    # Normalize for case-insensitive match and trim whitespace
+    norm = email.strip().lower()
+    return db.query(models.User).filter(func.lower(models.User.email) == norm).first()
 
 
 def get_user_by_phone(db: Session, phone: str):

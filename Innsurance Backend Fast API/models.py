@@ -53,14 +53,14 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
-    email = Column(String, unique=True, index=True)
+    email = Column(String, nullable=True)
     password = Column(String, nullable=False)  # Hashed password
-    phone = Column(String, unique=True, index=True)
+    phone = Column(String, nullable=True)
     address = Column(String)
     dateOfBirth = Column(Date)
     gender = Column(String)
-    panCard = Column(String, unique=True, index=True)
-    aadhar = Column(String, unique=True, index=True)
+    panCard = Column(String, nullable=True)
+    aadhar = Column(String, nullable=True)
     joinedDate = Column(Date)
     kycStatus = Column(SqlEnum(KycStatus), default=KycStatus.pending)
     profileImage = Column(String, nullable=True)

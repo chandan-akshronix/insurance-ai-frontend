@@ -1,5 +1,11 @@
 const metaEnv = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
-const API_BASE_URL = (metaEnv.VITE_API_BASE_URL ?? 'http://localhost:8000').replace(/\/$/, '');
+// Prefer an explicit VITE_API_BASE_URL when provided. Otherwise, in dev
+// environments use the current page host with port 8000 so requests
+// reach the backend started on the same machine (handles 127.0.0.1 vs hostname).
+const DEFAULT_API_BASE = (typeof window !== 'undefined')
+  ? `${window.location.protocol}//${window.location.hostname}:8000`
+  : 'http://localhost:8000';
+const API_BASE_URL = (metaEnv.VITE_API_BASE_URL ?? DEFAULT_API_BASE).replace(/\/$/, '');
 
 class ApiError extends Error {
   status: number;
