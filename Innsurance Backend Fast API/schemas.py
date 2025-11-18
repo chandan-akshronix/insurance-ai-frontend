@@ -7,6 +7,7 @@ from enum import Enum
 
 # ---------- ENUMS ----------
 class PolicyType(str, Enum):
+    life = "life_insurance"
     vehicle = "vehicle_insurance"
     health = "health_insurance"
 
