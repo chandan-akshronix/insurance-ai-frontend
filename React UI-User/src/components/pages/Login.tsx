@@ -46,7 +46,8 @@ export default function Login() {
       return;
     }
     try {
-      await login(loginEmail, loginPassword, 'user');
+      // Remove role parameter - role comes from database
+      await login(loginEmail, loginPassword);
       navigate(from, { replace: true });
     } catch (error) {
       toast.error('Login failed. Please try again.');
@@ -64,10 +65,11 @@ export default function Login() {
       return;
     }
     try {
-      await login(adminEmail, adminPassword, 'admin');
+      // Remove role parameter - role comes from database
+      await login(adminEmail, adminPassword);
       navigate('/admin');
     } catch (error) {
-      toast.error('Admin login failed. Please try again.');
+      toast.error('Admin login failed. Please check your credentials.');
     }
   };
 

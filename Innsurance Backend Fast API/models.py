@@ -46,6 +46,10 @@ class PaymentStatus(str, Enum):
     failed = "failed"
     cancelled = "cancelled"
 
+class UserRole(str, Enum):
+    user = "user"
+    admin = "admin"
+
 # ---------------------- MODELS ----------------------
 
 class User(Base):
@@ -63,6 +67,7 @@ class User(Base):
     aadhar = Column(String, nullable=True)
     joinedDate = Column(Date)
     kycStatus = Column(SqlEnum(KycStatus), default=KycStatus.pending)
+    role = Column(SqlEnum(UserRole), default=UserRole.user)  # User role: user or admin
     profileImage = Column(String, nullable=True)
     # Relationships
     policies = relationship("Policy", back_populates="user")

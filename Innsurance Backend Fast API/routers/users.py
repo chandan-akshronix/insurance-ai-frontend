@@ -25,7 +25,9 @@ def get_db():
 @router.post("/", response_model=dict)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     """
-    Create a new user (duplicate check temporarily disabled).
+    Create a new user. 
+    Role can be specified - 'user' (default) or 'admin'.
+    To create admin user, pass "role": "admin" in the request body.
     """
     try:
         # Normalize inputs
@@ -54,6 +56,22 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         # Auto-set kycStatus if not provided
         if not user_dict.get('kycStatus'):
             user_dict['kycStatus'] = 'pending'
+        
+        # Handle role: default to 'user' if not provided, otherwise use provided role
+        if not user_dict.get('role'):
+            user_dict['role'] = models.UserRole.user
+        else:
+            # Convert role to enum if it's a string
+            role_value = user_dict.get('role')
+            if isinstance(role_value, str):
+                if role_value.lower() == 'admin':
+                    user_dict['role'] = models.UserRole.admin
+                else:
+                    user_dict['role'] = models.UserRole.user
+            elif isinstance(role_value, models.UserRole):
+                user_dict['role'] = role_value
+            else:
+                user_dict['role'] = models.UserRole.user
 
         # Create and save user
         new_user = models.User(**user_dict)
@@ -66,13 +84,13 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         logger.debug("db object after refresh: %s",
                      {c.name: getattr(new_user, c.name, None) for c in new_user.__table__.columns})
 
-        logger.info("Created user id=%s email=%s", new_user.id, (new_user.email or ""))
+        logger.info("Created user id=%s email=%s role=%s", new_user.id, (new_user.email or ""), new_user.role.value)
 
         # Verify persistence
         try:
             verify = db.query(models.User).filter(models.User.id == new_user.id).first()
             if verify:
-                logger.info("Verify persisted user: id=%s email=%s", verify.id, verify.email)
+                logger.info("Verify persisted user: id=%s email=%s role=%s", verify.id, verify.email, verify.role.value)
             else:
                 logger.warning("User id=%s not found immediately after commit", new_user.id)
             total = db.query(models.User).count()
@@ -86,6 +104,7 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
             "message": "User created successfully",
             "userId": new_user.id,
             "email": new_user.email,
+            "role": new_user.role.value if new_user.role else "user"
         }
 
     except IntegrityError:
@@ -103,9 +122,8 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
             "message": "User created (duplicate ignored)",
             "userId": new_user.id,
             "email": new_user.email,
+            "role": new_user.role.value if new_user.role else "user"
         }
-
-
 
     except Exception as e:
         db.rollback()
@@ -113,8 +131,6 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
             status_code=500,
             detail=f"An unexpected error occurred: {str(e)}"
         )
-
-
 
 
 # -------------------- GET ALL USERS --------------------
@@ -132,6 +148,7 @@ def read_users(db: Session = Depends(get_db)):
              "aadhar": user.aadhar,
              "joinedDate": user.joinedDate,
              "kycStatus": user.kycStatus,
+             "role": user.role.value if user.role else "user",
              "profileImage": user.profileImage} for user in users]
 
 
@@ -152,6 +169,7 @@ def get_user_by_email(email: str, db: Session = Depends(get_db)):
             "aadhar": user.aadhar,
             "joinedDate": user.joinedDate,
             "kycStatus": user.kycStatus,
+            "role": user.role.value if user.role else "user",
             "profileImage": user.profileImage}
 
 
@@ -171,6 +189,7 @@ def get_user_by_phone(phone: str, db: Session = Depends(get_db)):
             "aadhar": user.aadhar,
             "joinedDate": user.joinedDate,
             "kycStatus": user.kycStatus,
+            "role": user.role.value if user.role else "user",
             "profileImage": user.profileImage}
 
 
@@ -190,6 +209,7 @@ def debug_recent_users(limit: int = 20, db: Session = Depends(get_db)):
         "aadhar": u.aadhar,
         "joinedDate": u.joinedDate,
         "kycStatus": u.kycStatus,
+        "role": u.role.value if u.role else "user",
         "profileImage": u.profileImage,
     } for u in users]
 
@@ -234,6 +254,7 @@ def read_user(userId: int, db: Session = Depends(get_db)):
             "aadhar": user.aadhar,
             "joinedDate": user.joinedDate,
             "kycStatus": user.kycStatus,
+            "role": user.role.value if user.role else "user",
             "profileImage": user.profileImage}
 
 

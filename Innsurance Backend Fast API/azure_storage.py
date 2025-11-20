@@ -18,16 +18,24 @@ class AzureStorageService:
         self.container_name = os.getenv("AZURE_STORAGE_CONTAINER_NAME", "insurance-documents")
         
         if not self.connection_string:
-            raise ValueError("AZURE_STORAGE_CONNECTION_STRING environment variable is not set")
+            # Make Azure Storage optional - log warning but don't raise error
+            print("WARNING: AZURE_STORAGE_CONNECTION_STRING environment variable is not set. File upload functionality will be disabled.")
+            self.blob_service_client = None
+            return
         
         # Initialize BlobServiceClient
-        self.blob_service_client = BlobServiceClient.from_connection_string(self.connection_string)
-        
-        # Ensure container exists
-        self._ensure_container_exists()
+        try:
+            self.blob_service_client = BlobServiceClient.from_connection_string(self.connection_string)
+            # Ensure container exists
+            self._ensure_container_exists()
+        except Exception as e:
+            print(f"WARNING: Failed to initialize Azure Storage: {e}. File upload functionality will be disabled.")
+            self.blob_service_client = None
     
     def _ensure_container_exists(self):
         """Create container if it doesn't exist"""
+        if not self.blob_service_client:
+            return
         try:
             container_client = self.blob_service_client.get_container_client(self.container_name)
             if not container_client.exists():
@@ -49,6 +57,8 @@ class AzureStorageService:
         Returns:
             Blob URL of the uploaded file
         """
+        if not self.blob_service_client:
+            raise ValueError("Azure Storage is not configured. Please set AZURE_STORAGE_CONNECTION_STRING environment variable.")
         try:
             # Generate unique file name to avoid conflicts
             file_extension = os.path.splitext(file_name)[1]
@@ -87,6 +97,8 @@ class AzureStorageService:
         Returns:
             File content as bytes
         """
+        if not self.blob_service_client:
+            raise ValueError("Azure Storage is not configured. Please set AZURE_STORAGE_CONNECTION_STRING environment variable.")
         try:
             blob_client = self.blob_service_client.get_blob_client(
                 container=self.container_name,
@@ -116,6 +128,8 @@ class AzureStorageService:
         Returns:
             True if deleted successfully, False otherwise
         """
+        if not self.blob_service_client:
+            raise ValueError("Azure Storage is not configured. Please set AZURE_STORAGE_CONNECTION_STRING environment variable.")
         try:
             blob_client = self.blob_service_client.get_blob_client(
                 container=self.container_name,
@@ -143,6 +157,8 @@ class AzureStorageService:
         Returns:
             Blob URL
         """
+        if not self.blob_service_client:
+            raise ValueError("Azure Storage is not configured. Please set AZURE_STORAGE_CONNECTION_STRING environment variable.")
         blob_client = self.blob_service_client.get_blob_client(
             container=self.container_name,
             blob=blob_name
@@ -160,6 +176,8 @@ class AzureStorageService:
         Returns:
             List of blob names
         """
+        if not self.blob_service_client:
+            return []
         try:
             container_client = self.blob_service_client.get_container_client(self.container_name)
             

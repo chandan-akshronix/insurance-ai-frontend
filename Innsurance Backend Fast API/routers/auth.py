@@ -44,8 +44,8 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)):
             detail="Invalid email or password"
         )
     
-    # Determine role (simple check - can be enhanced)
-    role = "admin" if user.email.endswith("@admin.com") else "user"
+    # Get role from database (secure - cannot be manipulated)
+    role = user.role.value if user.role else "user"
     
     return LoginResponse(
         userId=user.id,

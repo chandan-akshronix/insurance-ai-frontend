@@ -7,7 +7,6 @@ from enum import Enum
 
 # ---------- ENUMS ----------
 class PolicyType(str, Enum):
-    life = "life_insurance"
     vehicle = "vehicle_insurance"
     health = "health_insurance"
 
@@ -38,6 +37,10 @@ class KycStatus(str, Enum):
     pending = "pending"
     verified = "verified"
 
+class UserRole(str, Enum):
+    user = "user"
+    admin = "admin"
+
 class NotificationTypes(str, Enum):
     warning = "warning"
     success = "success"
@@ -60,17 +63,18 @@ class UserBase(BaseModel):
     gender: str
     panCard: str
     aadhar: str
+    kycStatus: KycStatus
+    role: UserRole = UserRole.user  # Default role is user
     profileImage: Optional[str] = None
 
 class UserCreate(UserBase):
     password: str  # Plain password - will be hashed before storing
-    joinedDate: Optional[date] = None  # Auto-set if not provided
-    kycStatus: Optional[KycStatus] = None  # Auto-set to pending if not provided
+    joinedDate: Optional[date] = None  # Optional - will be auto-set if not provided
+    role: Optional[UserRole] = None  # Optional - defaults to 'user' if not provided
 
 class User(UserBase):
     userId: int
-    joinedDate: date
-    kycStatus: KycStatus
+    joinedDate: date  # Add back for response
     model_config = {"from_attributes": True}
 
 class UserUpdate(BaseModel):
@@ -173,7 +177,6 @@ class ContactCreate(ContactBase):
 class Contact(ContactBase):
     contactId: int
     model_config = {"from_attributes": True}
-    # Pydantic v2 model config replaces v1 Config
 
 class ContactUpdate(BaseModel):
     fullName: Optional[str] = None
@@ -195,7 +198,6 @@ class QuotationCreate(QuotationBase):
 class Quotation(QuotationBase):
     quotationId: int
     model_config = {"from_attributes": True}
-    # Pydantic v2 model config replaces v1 Config
 
 class QuotationUpdate(BaseModel):
     category: Optional[PolicyType] = None
@@ -219,7 +221,6 @@ class DocumentCreate(DocumentBase):
 class Document(DocumentBase):
     documentId: int
     model_config = {"from_attributes": True}
-    # Pydantic v2 model config replaces v1 Config
 
 class DocumentUpdate(BaseModel):
     documentType: Optional[str] = None
@@ -240,7 +241,6 @@ class NomineeCreate(NomineeBase):
 class Nominee(NomineeBase):
     nomineeId: int
     model_config = {"from_attributes": True}
-    # Pydantic v2 model config replaces v1 Config
 
 class NomineeUpdate(BaseModel):
     name: Optional[str] = None
@@ -278,7 +278,6 @@ class ActivityCreate(ActivitiesBase):
 class Activity(ActivitiesBase):
     activityId: int
     model_config = {"from_attributes": True}
-    # Pydantic v2 model config replaces v1 Config
 
 # ---------- NOTIFICATIONS --------------------------------------------------------------------------
 class NotificationBase(BaseModel):
@@ -295,7 +294,6 @@ class Notification(NotificationBase):
     notificationId: int
     userId: Optional[int] = None
     model_config = {"from_attributes": True}
-    # Pydantic v2 model config replaces v1 Config
 
 
 #---------- PAYMENTS --------------------------------------------------------------------------
@@ -318,4 +316,3 @@ class PaymentCreate(PaymentBase):
 class Payment(PaymentBase):
     paymentId: int
     model_config = {"from_attributes": True}
-    # Pydantic v2 model config replaces v1 Config
