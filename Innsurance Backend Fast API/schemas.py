@@ -66,6 +66,8 @@ class UserBase(BaseModel):
     kycStatus: KycStatus
     role: UserRole = UserRole.user  # Default role is user
     profileImage: Optional[str] = None
+    occupation: Optional[str] = None
+    annualIncome: Optional[str] = None
 
 class UserCreate(UserBase):
     password: str  # Plain password - will be hashed before storing
@@ -81,6 +83,8 @@ class UserUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     address: Optional[str] = None
+    occupation: Optional[str] = None
+    annualIncome: Optional[str] = None
 
 
 # ---------- POLICY ----------

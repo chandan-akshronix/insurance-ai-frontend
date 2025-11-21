@@ -69,6 +69,8 @@ class User(Base):
     kycStatus = Column(SqlEnum(KycStatus), default=KycStatus.pending)
     role = Column(SqlEnum(UserRole), default=UserRole.user)  # User role: user or admin
     profileImage = Column(String, nullable=True)
+    occupation = Column(String, nullable=True)
+    annualIncome = Column('annualincome', String, nullable=True)
     # Relationships
     policies = relationship("Policy", back_populates="user")
     policy_purchases = relationship("PolicyPurchase", back_populates="user")

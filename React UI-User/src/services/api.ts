@@ -13,392 +13,154 @@ async function mockApiCall<T>(data: T, delayMs: number = 500): Promise<T> {
 // ==================== USER APIs ====================
 
 /**
- * GET /api/user/profile
+ * GET /users/{userId}
  * Fetches the current user's profile information
  */
-export async function getUserProfile() {
-  return mockApiCall({
-    id: 'user-123',
-    name: 'John Doe',
-    email: 'john.doe@example.com',
-    phone: '+91 98765 43210',
-    address: '123 Main Street, Mumbai, Maharashtra 400001',
-    dateOfBirth: '1990-05-15',
-    gender: 'Male',
-    panCard: 'ABCDE1234F',
-    aadhar: '1234 5678 9012',
-    joinedDate: '2024-01-15',
-    kycStatus: 'verified',
-    profileImage: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop'
-  });
+export async function getUserProfile(userId?: number | string) {
+  const id = userId || localStorage.getItem('userId') || '1';
+  return request<BackendUser>(`/users/${id}`).then(mapUser);
 }
 
 /**
- * PUT /api/user/profile
+ * PUT /users/{userId}
  * Updates user profile information
  */
-export async function updateUserProfile(data: any) {
-  return mockApiCall({ success: true, message: 'Profile updated successfully' });
+export async function updateUserProfile(userId: number | string, payload: any) {
+  return request(`/users/${userId}`, {
+    method: 'PUT',
+    body: payload,
+  });
 }
 
 // ==================== POLICY APIs ====================
 
 /**
- * GET /api/policies
+ * GET /policy/user/{userId}
  * Fetches all policies for the current user
  */
-export async function getUserPolicies() {
-  return mockApiCall({
-    policies: [
-      {
-        id: 'POL-001',
-        type: 'Life Insurance',
-        planName: 'HDFC Click 2 Protect Plus',
-        policyNumber: 'SI-2025-001234',
-        coverage: '₹50,00,000',
-        premium: '₹850/month',
-        status: 'Active',
-        startDate: '2024-10-14',
-        expiryDate: '2045-10-14',
-        benefits: ['Death Benefit', 'Terminal Illness', 'Accidental Death'],
-        nominee: 'Jane Doe',
-        policyDocument: '/documents/policy-001.pdf'
-      },
-      {
-        id: 'POL-002',
-        type: 'Car Insurance',
-        planName: 'Comprehensive Car Cover',
-        policyNumber: 'SI-2024-005678',
-        coverage: '₹8,50,000',
-        premium: '₹708/month',
-        status: 'Active',
-        startDate: '2024-03-20',
-        expiryDate: '2025-03-20',
-        benefits: ['Own Damage', 'Third Party', 'Zero Depreciation'],
-        vehicleDetails: {
-          make: 'Maruti Suzuki',
-          model: 'Swift',
-          year: 2022,
-          registrationNumber: 'MH-01-AB-1234'
-        },
-        policyDocument: '/documents/policy-002.pdf'
-      },
-      {
-        id: 'POL-003',
-        type: 'Health Insurance',
-        planName: 'Family Floater Plan',
-        policyNumber: 'SI-2024-009012',
-        coverage: '₹10,00,000',
-        premium: '₹1,250/month',
-        status: 'Renewal Due',
-        startDate: '2024-11-05',
-        expiryDate: '2025-11-05',
-        benefits: ['Hospitalization', 'Pre/Post Hospitalization', 'Day Care'],
-        familyMembers: 4,
-        policyDocument: '/documents/policy-003.pdf'
-      }
-    ]
-  });
+export async function getUserPolicies(userId?: number | string) {
+  const id = userId || localStorage.getItem('userId') || '1';
+  return request<any[]>(`/policy/user/${id}`);
 }
 
 /**
- * GET /api/policies/:id
+ * GET /policy/{policyId}
  * Fetches details of a specific policy
  */
 export async function getPolicyDetails(policyId: string) {
-  const allPolicies = await getUserPolicies();
-  const policy = allPolicies.policies.find(p => p.id === policyId);
-  return mockApiCall(policy);
+  return request<any>(`/policy/${policyId}`);
 }
 
 /**
- * POST /api/policies/purchase
+ * POST /policy/purchase
  * Creates a new insurance policy
  */
 export async function purchasePolicy(policyData: any) {
-  return mockApiCall({
-    success: true,
-    policyId: 'POL-' + Math.random().toString(36).substr(2, 9),
-    message: 'Policy purchased successfully',
-    policyNumber: 'SI-2025-' + Math.floor(100000 + Math.random() * 900000)
+  return request(`/policy/purchase`, {
+    method: 'POST',
+    body: policyData,
   });
 }
 
 // ==================== CLAIMS APIs ====================
 
 /**
- * GET /api/claims
+ * GET /claims/user/{userId}
  * Fetches all claims for the current user
  */
-export async function getUserClaims() {
-  return mockApiCall({
-    claims: [
-      {
-        id: 'CLM-001',
-        claimNumber: 'CLM-2025-001',
-        policyNumber: 'SI-2024-005678',
-        type: 'Car Insurance',
-        amount: '₹45,000',
-        claimedAmount: '₹45,000',
-        approvedAmount: '₹45,000',
-        status: 'approved',
-        submittedDate: '2025-09-15',
-        approvedDate: '2025-10-01',
-        description: 'Accident damage to front bumper',
-        documents: ['accident-report.pdf', 'repair-estimate.pdf']
-      },
-      {
-        id: 'CLM-002',
-        claimNumber: 'CLM-2025-002',
-        policyNumber: 'SI-2024-009012',
-        type: 'Health Insurance',
-        amount: '₹75,000',
-        claimedAmount: '₹75,000',
-        approvedAmount: null,
-        status: 'pending',
-        submittedDate: '2025-10-20',
-        approvedDate: null,
-        description: 'Hospitalization for surgery',
-        documents: ['medical-bills.pdf', 'discharge-summary.pdf']
-      }
-    ]
-  });
+export async function getUserClaims(userId?: number | string) {
+  const id = userId || localStorage.getItem('userId') || '1';
+  return request<any[]>(`/claims/user/${id}`);
 }
 
 /**
- * GET /api/claims/:id
+ * GET /claims/{claimId}
  * Fetches details of a specific claim
  */
 export async function getClaimDetails(claimId: string) {
-  const allClaims = await getUserClaims();
-  const claim = allClaims.claims.find(c => c.id === claimId);
-  return mockApiCall(claim);
+  return request<any>(`/claims/${claimId}`);
 }
 
 /**
- * POST /api/claims/submit
+ * POST /claims/
  * Submits a new insurance claim
  */
 export async function submitClaim(claimData: any) {
-  return mockApiCall({
-    success: true,
-    claimId: 'CLM-' + Math.random().toString(36).substr(2, 9),
-    claimNumber: 'CLM-2025-' + Math.floor(100 + Math.random() * 900),
-    message: 'Claim submitted successfully'
+  return request(`/claims/`, {
+    method: 'POST',
+    body: claimData,
   });
 }
 
 /**
- * PUT /api/claims/:id
+ * PUT /claims/{claimId}
  * Updates a claim (add documents, comments, etc.)
  */
 export async function updateClaim(claimId: string, updateData: any) {
-  return mockApiCall({
-    success: true,
-    message: 'Claim updated successfully'
+  return request(`/claims/${claimId}`, {
+    method: 'PUT',
+    body: updateData,
   });
 }
 
 // ==================== ACTIVITY APIs ====================
 
 /**
- * GET /api/user/activities
+ * GET /activities/user/{userId}
  * Fetches recent user activities
  */
-export async function getUserActivities() {
-  return mockApiCall({
-    activities: [
-      {
-        id: 'ACT-001',
-        date: '2025-10-12',
-        description: 'Premium payment successful for Life Insurance',
-        type: 'payment',
-        amount: '₹850'
-      },
-      {
-        id: 'ACT-002',
-        date: '2025-10-08',
-        description: 'New policy purchased - Life Insurance',
-        type: 'policy',
-        policyId: 'POL-001'
-      },
-      {
-        id: 'ACT-003',
-        date: '2025-10-01',
-        description: 'Claim approved for Car Insurance - ₹45,000',
-        type: 'claim',
-        claimId: 'CLM-001',
-        amount: '₹45,000'
-      },
-      {
-        id: 'ACT-004',
-        date: '2025-09-25',
-        description: 'Health check-up completed',
-        type: 'health'
-      }
-    ]
-  });
+export async function getUserActivities(userId?: number | string) {
+  const id = userId || localStorage.getItem('userId') || '1';
+  return request<any[]>(`/activities/user/${id}`);
 }
 
 // ==================== NOTIFICATION APIs ====================
 
 /**
- * GET /api/notifications
+ * GET /notifications/user/{userId}
  * Fetches user notifications
  */
-export async function getNotifications() {
-  return mockApiCall({
-    notifications: [
-      {
-        id: 'NOT-001',
-        message: 'Car insurance renewal due in 30 days',
-        time: '2 hours ago',
-        type: 'warning',
-        read: false,
-        policyId: 'POL-002'
-      },
-      {
-        id: 'NOT-002',
-        message: 'Premium payment successful',
-        time: '1 day ago',
-        type: 'success',
-        read: false
-      },
-      {
-        id: 'NOT-003',
-        message: 'Annual health check-up reminder',
-        time: '3 days ago',
-        type: 'info',
-        read: true
-      }
-    ]
-  });
+export async function getNotifications(userId?: number | string, unreadOnly: boolean = false) {
+  const id = userId || localStorage.getItem('userId') || '1';
+  return request<any[]>(`/notifications/user/${id}?unread_only=${unreadOnly}`);
 }
 
 /**
- * PUT /api/notifications/:id/read
+ * PUT /notifications/{notificationId}/read
  * Marks a notification as read
  */
-export async function markNotificationAsRead(notificationId: string) {
-  return mockApiCall({ success: true });
+export async function markNotificationAsRead(notificationId: string, userId?: number | string) {
+  const id = userId || localStorage.getItem('userId') || '1';
+  return request(`/notifications/${notificationId}/read`, {
+    method: 'PUT',
+    body: { userId: id },
+  });
 }
 
 // ==================== ADMIN APIs ====================
 
 /**
- * GET /api/admin/stats
+ * GET /public/stats
  * Fetches admin dashboard statistics
  */
 export async function getAdminStats() {
-  return mockApiCall({
-    totalUsers: 12458,
-    activePolicies: 8234,
-    claimsProcessed: 1456,
-    revenue: '₹45.2M',
-    userGrowth: 12.5,
-    policyGrowth: 8.2,
-    claimsGrowth: 15.3,
-    revenueGrowth: 18.7
-  });
+  return request<any>(`/public/stats`);
 }
 
 /**
- * GET /api/admin/claims
+ * GET /claims/
  * Fetches all claims for admin review
  */
 export async function getAdminClaims() {
-  return mockApiCall({
-    claims: [
-      {
-        id: 'CLM-001',
-        claimNumber: 'CLM-2025-001',
-        userName: 'Rajesh Kumar',
-        userEmail: 'rajesh.kumar@example.com',
-        type: 'Health',
-        amount: '₹50,000',
-        status: 'pending',
-        submittedDate: '2 hours ago',
-        policyNumber: 'SI-2024-123456'
-      },
-      {
-        id: 'CLM-002',
-        claimNumber: 'CLM-2025-002',
-        userName: 'Priya Sharma',
-        userEmail: 'priya.sharma@example.com',
-        type: 'Car',
-        amount: '₹35,000',
-        status: 'approved',
-        submittedDate: '5 hours ago',
-        policyNumber: 'SI-2024-234567'
-      },
-      {
-        id: 'CLM-003',
-        claimNumber: 'CLM-2025-003',
-        userName: 'Amit Patel',
-        userEmail: 'amit.patel@example.com',
-        type: 'Life',
-        amount: '₹1,00,000',
-        status: 'review',
-        submittedDate: '1 day ago',
-        policyNumber: 'SI-2024-345678'
-      },
-      {
-        id: 'CLM-004',
-        claimNumber: 'CLM-2025-004',
-        userName: 'Sneha Reddy',
-        userEmail: 'sneha.reddy@example.com',
-        type: 'Health',
-        amount: '₹25,000',
-        status: 'rejected',
-        submittedDate: '2 days ago',
-        policyNumber: 'SI-2024-456789'
-      }
-    ]
-  });
+  return request<any[]>(`/claims/`);
 }
 
 /**
- * GET /api/admin/users
+ * GET /users/
  * Fetches all users for admin management
  */
 export async function getAdminUsers() {
-  return mockApiCall({
-    users: [
-      {
-        id: 'USER-001',
-        name: 'John Doe',
-        email: 'john@example.com',
-        phone: '+91 98765 43210',
-        policies: 3,
-        totalPremium: '₹2,808/month',
-        joinedDate: '2 days ago',
-        status: 'active',
-        kycStatus: 'verified'
-      },
-      {
-        id: 'USER-002',
-        name: 'Jane Smith',
-        email: 'jane@example.com',
-        phone: '+91 98765 43211',
-        policies: 2,
-        totalPremium: '₹1,558/month',
-        joinedDate: '3 days ago',
-        status: 'active',
-        kycStatus: 'verified'
-      },
-      {
-        id: 'USER-003',
-        name: 'Mike Johnson',
-        email: 'mike@example.com',
-        phone: '+91 98765 43212',
-        policies: 1,
-        totalPremium: '₹850/month',
-        joinedDate: '5 days ago',
-        status: 'active',
-        kycStatus: 'pending'
-      }
-    ]
-  });
+  return request<any[]>(`/users/`);
 }
 
 // Helper function for real API calls
@@ -487,180 +249,115 @@ export async function createUser(payload: UserCreatePayload) {
 }
 
 /**
- * PUT /api/admin/claims/:id/approve
+ * PUT /claims/{claimId}/approve
  * Approves a claim
  */
-export async function approveClaim(claimId: string, approvedAmount: string) {
-  return mockApiCall({
-    success: true,
-    message: 'Claim approved successfully'
+export async function approveClaim(claimId: string, approvedAmount?: number | string) {
+  return request(`/claims/${claimId}/approve`, {
+    method: 'PUT',
+    body: { approvedAmount },
   });
 }
 
 /**
- * PUT /api/admin/claims/:id/reject
+ * PUT /claims/{claimId}/reject
  * Rejects a claim
  */
-export async function rejectClaim(claimId: string, reason: string) {
-  return mockApiCall({
-    success: true,
-    message: 'Claim rejected'
+export async function rejectClaim(claimId: string, reason?: string) {
+  return request(`/claims/${claimId}/reject`, {
+    method: 'PUT',
+    body: { reason },
   });
 }
 
 // ==================== HOMEPAGE/PUBLIC APIs ====================
 
 /**
- * GET /api/public/testimonials
+ * GET /public/testimonials
  * Fetches customer testimonials
  */
 export async function getTestimonials() {
-  return mockApiCall({
-    testimonials: [
-      {
-        id: 'TEST-001',
-        name: 'Sarah Johnson',
-        role: 'Life Insurance Customer',
-        content: 'SecureInsure made the process so simple. I got my policy within 24 hours!',
-        rating: 5,
-        image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop',
-        location: 'Mumbai, Maharashtra'
-      },
-      {
-        id: 'TEST-002',
-        name: 'Michael Chen',
-        role: 'Car Insurance Customer',
-        content: 'Best car insurance rates I found. The claim process was seamless.',
-        rating: 5,
-        image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop',
-        location: 'Bangalore, Karnataka'
-      },
-      {
-        id: 'TEST-003',
-        name: 'Priya Sharma',
-        role: 'Health Insurance Customer',
-        content: 'Comprehensive coverage for my entire family at an affordable price.',
-        rating: 5,
-        image: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop',
-        location: 'Delhi, NCR'
-      }
-    ]
-  });
+  return request<any[]>(`/public/testimonials`);
 }
 
 /**
- * GET /api/public/stats
+ * GET /public/stats
  * Fetches platform statistics
  */
 export async function getPlatformStats() {
-  return mockApiCall({
-    happyCustomers: '500K+',
-    claimsSettled: '₹1000Cr+',
-    satisfactionRate: '98%',
-    supportAvailability: '24/7'
-  });
+  return request<any>(`/public/stats`);
 }
 
 /**
- * POST /api/public/quote
+ * POST /quotation/request
  * Requests a quote for insurance
  */
 export async function requestQuote(quoteData: any) {
-  return mockApiCall({
-    success: true,
-    quoteId: 'QTE-' + Math.random().toString(36).substr(2, 9),
-    estimatedPremium: '₹' + (Math.floor(Math.random() * 2000) + 500) + '/month',
-    message: 'Quote generated successfully'
+  return request(`/quotation/request`, {
+    method: 'POST',
+    body: quoteData,
   });
 }
 
 // ==================== DOCUMENT APIs ====================
 
 /**
- * POST /api/documents/upload
+ * POST /documents/upload
  * Uploads a document
  */
-export async function uploadDocument(file: File, documentType: string) {
-  return mockApiCall({
-    success: true,
-    documentId: 'DOC-' + Math.random().toString(36).substr(2, 9),
-    fileName: file.name,
-    fileUrl: '/documents/' + file.name,
-    message: 'Document uploaded successfully'
-  }, 1000);
+export async function uploadDocument(file: File, documentType: string, userId?: number | string, policyId?: number | string) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('documentType', documentType);
+  formData.append('userId', String(userId || localStorage.getItem('userId') || '1'));
+  if (policyId) formData.append('policyId', String(policyId));
+  
+  const baseUrl = 'http://localhost:8000';
+  const response = await fetch(`${baseUrl}/documents/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+  
+  if (!response.ok) throw new Error(`Upload failed: ${response.statusText}`);
+  return response.json();
 }
 
 /**
- * GET /api/documents/:id
+ * GET /documents/{documentId}
  * Fetches a document by ID
  */
 export async function getDocument(documentId: string) {
-  return mockApiCall({
-    documentId,
-    fileName: 'document.pdf',
-    fileUrl: '/documents/document.pdf',
-    uploadedDate: '2025-10-15',
-    fileSize: '2.5 MB'
-  });
+  return request<any>(`/documents/${documentId}`);
 }
 
 // ==================== PAYMENT APIs ====================
 
 /**
- * POST /api/payments/initiate
+ * POST /payments/
  * Initiates a payment
  */
 export async function initiatePayment(paymentData: any) {
-  return mockApiCall({
-    success: true,
-    paymentId: 'PAY-' + Math.random().toString(36).substr(2, 9),
-    orderId: 'ORD-' + Math.random().toString(36).substr(2, 9),
-    amount: paymentData.amount,
-    paymentUrl: 'https://payment.secureinsure.com/pay/xyz123'
+  return request(`/payments/`, {
+    method: 'POST',
+    body: paymentData,
   });
 }
 
 /**
- * GET /api/payments/:id/status
+ * GET /payments/{paymentId}
  * Checks payment status
  */
 export async function getPaymentStatus(paymentId: string) {
-  return mockApiCall({
-    paymentId,
-    status: 'success',
-    amount: '₹850',
-    transactionId: 'TXN-' + Math.random().toString(36).substr(2, 9),
-    paidDate: '2025-10-12T10:30:00Z'
-  });
+  return request<any>(`/payments/${paymentId}`);
 }
 
 /**
- * GET /api/payments/history
+ * GET /payments/history/{userId}
  * Fetches payment history
  */
-export async function getPaymentHistory() {
-  return mockApiCall({
-    payments: [
-      {
-        id: 'PAY-001',
-        amount: '₹850',
-        policyNumber: 'SI-2025-001234',
-        policyType: 'Life Insurance',
-        status: 'success',
-        date: '2025-10-12',
-        transactionId: 'TXN-123456789'
-      },
-      {
-        id: 'PAY-002',
-        amount: '₹708',
-        policyNumber: 'SI-2024-005678',
-        policyType: 'Car Insurance',
-        status: 'success',
-        date: '2025-09-20',
-        transactionId: 'TXN-987654321'
-      }
-    ]
-  });
+export async function getPaymentHistory(userId?: number | string) {
+  const id = userId || localStorage.getItem('userId') || '1';
+  return request<any[]>(`/payments/history/${id}`);
 }
 
 export async function getProducts() {

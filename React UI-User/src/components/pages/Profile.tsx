@@ -132,7 +132,9 @@ export default function Profile() {
         address: formData.address,
         city: formData.city,
         state: formData.state,
-        pincode: formData.pincode
+        pincode: formData.pincode,
+        occupation: formData.occupation,
+        annualIncome: formData.annualIncome
       });
       toast.success('Profile updated successfully!');
       setIsEditing(false);

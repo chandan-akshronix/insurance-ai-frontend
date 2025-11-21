@@ -20,6 +20,8 @@ interface User {
   city?: string;
   state?: string;
   pincode?: string;
+  occupation?: string;
+  annualIncome?: string;
 }
 
 interface AuthContextType {
@@ -127,12 +129,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateUser = async (userData: Partial<User>) => {
     if (!user) return;
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const updatedUser = { ...user, ...userData };
-    setUser(updatedUser);
-    localStorage.setItem('user', JSON.stringify(updatedUser));
+    try {
+      // Call real API to update user profile
+      const payload: any = {};
+      if (userData.name) payload.name = userData.name;
+      if (userData.phone) payload.phone = userData.phone;
+      if (userData.address) payload.address = userData.address;
+      if (userData.dateOfBirth) payload.dateOfBirth = userData.dateOfBirth;
+      if (userData.gender) payload.gender = userData.gender;
+      if (userData.occupation) payload.occupation = userData.occupation;
+      if (userData.annualIncome) payload.annualIncome = userData.annualIncome;
+      
+      await apiUpdateUserProfile(user.id, payload);
+      
+      const updatedUser = { ...user, ...userData };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      toast.success('Profile updated successfully');
+    } catch (e: any) {
+      toast.error('Failed to update profile');
+      throw e;
+    }
   };
 
   return (

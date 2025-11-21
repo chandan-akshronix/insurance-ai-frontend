@@ -39,6 +39,10 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         user_dict['email'] = incoming_email
         user_dict['phone'] = incoming_phone
 
+        # Sanitize annualIncome
+        if user_dict.get('annualIncome'):
+             user_dict['annualIncome'] = user_dict['annualIncome'].replace('₹', '').replace(',', '').strip()
+
         # Log input (mask password)
         try:
             debug_payload = {k: (v if k != 'password' else '***') for k, v in user_dict.items()}
@@ -104,7 +108,9 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
             "message": "User created successfully",
             "userId": new_user.id,
             "email": new_user.email,
-            "role": new_user.role.value if new_user.role else "user"
+            "role": new_user.role.value if new_user.role else "user",
+            "occupation": new_user.occupation,
+            "annualIncome": new_user.annualIncome
         }
 
     except IntegrityError:
@@ -122,7 +128,9 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
             "message": "User created (duplicate ignored)",
             "userId": new_user.id,
             "email": new_user.email,
-            "role": new_user.role.value if new_user.role else "user"
+            "role": new_user.role.value if new_user.role else "user",
+            "occupation": new_user.occupation,
+            "annualIncome": new_user.annualIncome
         }
 
     except Exception as e:
@@ -149,7 +157,9 @@ def read_users(db: Session = Depends(get_db)):
              "joinedDate": user.joinedDate,
              "kycStatus": user.kycStatus,
              "role": user.role.value if user.role else "user",
-             "profileImage": user.profileImage} for user in users]
+             "profileImage": user.profileImage,
+             "occupation": user.occupation,
+             "annualIncome": user.annualIncome} for user in users]
 
 
 # -------------------- EXTRA USER-SCOPED ENDPOINTS (SPECIFIC ROUTES FIRST) --------------------
@@ -170,7 +180,9 @@ def get_user_by_email(email: str, db: Session = Depends(get_db)):
             "joinedDate": user.joinedDate,
             "kycStatus": user.kycStatus,
             "role": user.role.value if user.role else "user",
-            "profileImage": user.profileImage}
+            "profileImage": user.profileImage,
+            "occupation": user.occupation,
+            "annualIncome": user.annualIncome}
 
 
 @router.get("/phone/{phone}", response_model=schemas.User)
@@ -190,7 +202,9 @@ def get_user_by_phone(phone: str, db: Session = Depends(get_db)):
             "joinedDate": user.joinedDate,
             "kycStatus": user.kycStatus,
             "role": user.role.value if user.role else "user",
-            "profileImage": user.profileImage}
+            "profileImage": user.profileImage,
+            "occupation": user.occupation,
+            "annualIncome": user.annualIncome}
 
 
 @router.get("/_debug/recent", response_model=list[schemas.User])
@@ -211,6 +225,8 @@ def debug_recent_users(limit: int = 20, db: Session = Depends(get_db)):
         "kycStatus": u.kycStatus,
         "role": u.role.value if u.role else "user",
         "profileImage": u.profileImage,
+        "occupation": u.occupation,
+        "annualIncome": u.annualIncome,
     } for u in users]
 
 
@@ -255,7 +271,9 @@ def read_user(userId: int, db: Session = Depends(get_db)):
             "joinedDate": user.joinedDate,
             "kycStatus": user.kycStatus,
             "role": user.role.value if user.role else "user",
-            "profileImage": user.profileImage}
+            "profileImage": user.profileImage,
+            "occupation": user.occupation,
+            "annualIncome": user.annualIncome}
 
 
 # -------------------- DELETE USER --------------------
@@ -270,6 +288,10 @@ def delete_user(userId: int, db: Session = Depends(get_db)):
 # -------------------- UPDATE USER --------------------
 @router.put("/{userId}")
 def update_user(userId: int, user: schemas.UserUpdate, db: Session = Depends(get_db)):
+    # Sanitize annualIncome to remove currency symbols and commas
+    if user.annualIncome:
+        user.annualIncome = user.annualIncome.replace('₹', '').replace(',', '').strip()
+
     success = crud.update_by_id(db, models.User, "id", userId, user)
     if not success:
         return {"success": False, 
