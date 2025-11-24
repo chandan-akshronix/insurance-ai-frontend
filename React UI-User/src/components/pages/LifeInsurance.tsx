@@ -545,10 +545,35 @@ export default function LifeInsurance() {
         },
         riders: formData.selectedRiders.map((r: string) => ({ rider_id: r })),
         health_info: {
+          // Physical details
           weight: formData.weight,
           height: formData.height,
-          tobacco: formData.tobacco,
-          alcohol: formData.alcohol
+
+          // Question-wise health answers (true = Yes, false = No)
+          tobacco_consumption: !!formData.tobacco,
+          alcohol_last_year: !!formData.alcohol,
+          ever_consumed_narcotics: !!formData.narcotics,
+          hazardous_occupation_or_hobby: !!formData.hazardousOccupation,
+          employed_in_armed_forces_or_police: !!formData.armedForces,
+          prior_tests_investigations_or_surgery: !!formData.surgeryHistory,
+          hypertension_high_bp_or_cholesterol: !!formData.hypertension,
+          chest_pain_heart_attack_or_heart_disease: !!formData.heartDisease,
+          undergone_angioplasty_bypass_or_heart_surgery: !!formData.heartSurgery,
+          diabetes_or_related_complications: !!formData.diabetes,
+          respiratory_disorders_like_asthma_tb: !!formData.respiratory,
+          nervous_disorders_stroke_or_epilepsy: !!formData.nervousDisorders,
+          gastrointestinal_disorders: !!formData.gastrointestinal,
+          liver_disorders_or_hepatitis: !!formData.liverDisorders,
+          genitourinary_disorders: !!formData.genitourinary,
+          history_of_cancer_or_tumour: !!formData.cancer,
+          hiv_infection_or_positive_test: !!formData.hiv,
+          anemia_or_blood_disorders: !!formData.bloodDisorders,
+          psychiatric_illness: !!formData.psychiatric,
+          other_disorder: !!formData.otherDisorder,
+          congenital_defects_or_physical_deformity: !!formData.congenitalDefects,
+          family_history_hereditary_before_55: !!formData.familyHistory,
+          ailment_or_injury_medical_leave_over_week_in_last_two_years: !!formData.recentAilment,
+          weight_change_over_10kg_in_6_months: !!formData.weightChange
         },
         nominee_details: {
           name: formData.nomineeName,
