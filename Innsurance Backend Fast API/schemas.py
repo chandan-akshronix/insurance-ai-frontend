@@ -213,7 +213,7 @@ class QuotationUpdate(BaseModel):
 # ---------- DOCUMENTS ------------------------------------------------------------------------------------
 class DocumentBase(BaseModel):  
     userId: int
-    policyId: int
+    policyId: Optional[int] = None
     documentType: str
     documentUrl: str
     uploadDate: date

@@ -68,6 +68,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       setUser(uiUser);
       localStorage.setItem('user', JSON.stringify(uiUser));
+      // store a lightweight user id string for API helpers
+      localStorage.setItem('userId', uiUser.id);
       toast.success('Login successful!');
     } catch (e: any) {
       // API returns 401 for invalid credentials
@@ -113,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUser(uiUser);
       localStorage.setItem('user', JSON.stringify(uiUser));
+      localStorage.setItem('userId', uiUser.id);
       toast.success('Registration successful!');
     } catch (e: any) {
       toast.error('Registration failed. Please try again.');
@@ -123,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setUser(null);
     localStorage.removeItem('user');
+    localStorage.removeItem('userId');
     toast.success('Logged out successfully');
   };
 

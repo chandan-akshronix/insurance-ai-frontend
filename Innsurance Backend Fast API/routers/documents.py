@@ -1,6 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
 from sqlalchemy.orm import Session
 from datetime import date
+import os
+import uuid
+import logging
+import traceback
 import schemas, models, crud
 from database import get_db
 from azure_storage import azure_storage
@@ -8,11 +12,14 @@ from typing import Optional
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
+logger = logging.getLogger(__name__)
+
 @router.post("/upload")
 async def upload_document(
+    request: Request,
     file: UploadFile = File(...),
     userId: int = Form(...),
-    policyId: int = Form(...),
+    policyId: Optional[int] = Form(None),
     documentType: str = Form(...),
     db: Session = Depends(get_db)
 ):
@@ -23,7 +30,7 @@ async def upload_document(
         # Read file content
         file_content = await file.read()
         file_size = len(file_content)
-        
+
         # Determine folder based on document type
         folder_map = {
             "policy_document": "policies",
@@ -32,13 +39,33 @@ async def upload_document(
             "other": "documents"
         }
         folder = folder_map.get(documentType, "documents")
-        
-        # Upload to Azure Blob Storage
-        blob_url = azure_storage.upload_file(
-            file_content=file_content,
-            file_name=file.filename,
-            folder=folder
-        )
+
+        # Upload to Azure Blob Storage if configured, otherwise save locally to ./uploads
+        if getattr(azure_storage, 'blob_service_client', None):
+            try:
+                blob_url = azure_storage.upload_file(
+                    file_content=file_content,
+                    file_name=file.filename,
+                    folder=folder
+                )
+            except Exception:
+                logger.exception('Azure upload failed')
+                raise
+        else:
+            # fallback local save
+            uploads_dir = os.path.join(os.getcwd(), 'uploads')
+            os.makedirs(uploads_dir, exist_ok=True)
+            # use unique filename
+            ext = os.path.splitext(file.filename)[1]
+            unique_name = f"{uuid.uuid4()}{ext}"
+            # optional folder segregation
+            dest_folder = os.path.join(uploads_dir, folder)
+            os.makedirs(dest_folder, exist_ok=True)
+            dest_path = os.path.join(dest_folder, unique_name)
+            with open(dest_path, 'wb') as fh:
+                fh.write(file_content)
+            # Use request.base_url to construct accessible URL
+            blob_url = str(request.base_url) + f"uploads/{folder}/{unique_name}"
         
         # Create document record in database
         document_data = schemas.DocumentCreate(
@@ -62,7 +89,10 @@ async def upload_document(
         }
     
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error uploading document: {str(e)}")
+        # Log full traceback for debugging
+        tb = traceback.format_exc()
+        logger.error('Error in /documents/upload: %s\nTraceback:\n%s', str(e), tb)
+        raise HTTPException(status_code=500, detail="Error uploading document. See server logs for details.")
 
 @router.post("/")
 def create_document(document: schemas.DocumentCreate, db: Session = Depends(get_db)):

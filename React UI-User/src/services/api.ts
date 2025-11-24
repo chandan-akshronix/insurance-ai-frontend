@@ -305,21 +305,47 @@ export async function requestQuote(quoteData: any) {
  * POST /documents/upload
  * Uploads a document
  */
-export async function uploadDocument(file: File, documentType: string, userId?: number | string, policyId?: number | string) {
+export async function uploadDocument(
+  file: File,
+  documentType: string,
+  userId?: number | string,
+  policyId?: number | string,
+  onProgress?: (percent: number) => void
+) {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('documentType', documentType);
   formData.append('userId', String(userId || localStorage.getItem('userId') || '1'));
   if (policyId) formData.append('policyId', String(policyId));
-  
+
   const baseUrl = 'http://localhost:8000';
-  const response = await fetch(`${baseUrl}/documents/upload`, {
-    method: 'POST',
-    body: formData,
+
+  return new Promise<any>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${baseUrl}/documents/upload`);
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const json = JSON.parse(xhr.responseText);
+          resolve(json);
+        } catch (e) {
+          resolve({});
+        }
+      } else {
+        reject(new Error(xhr.statusText || 'Upload failed'));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Upload failed'));
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent);
+        }
+      };
+    }
+    xhr.send(formData);
   });
-  
-  if (!response.ok) throw new Error(`Upload failed: ${response.statusText}`);
-  return response.json();
 }
 
 /**
@@ -358,6 +384,31 @@ export async function getPaymentStatus(paymentId: string) {
 export async function getPaymentHistory(userId?: number | string) {
   const id = userId || localStorage.getItem('userId') || '1';
   return request<any[]>(`/payments/history/${id}`);
+}
+
+// ==================== LIFE INSURANCE APPLICATION APIs ====================
+
+export async function createLifeApplication(payload: any) {
+  return request(`/life-insurance/`, {
+    method: 'POST',
+    body: payload,
+  });
+}
+
+export async function getUserLifeApplications(userId?: number | string) {
+  const id = userId || localStorage.getItem('userId') || '1';
+  return request<any[]>(`/life-insurance/user/${id}`);
+}
+
+export async function getLifeApplicationById(appId: string) {
+  return request<any>(`/life-insurance/${appId}`);
+}
+
+export async function updateLifeApplication(appId: string, payload: any) {
+  return request(`/life-insurance/${appId}`, {
+    method: 'PATCH',
+    body: payload,
+  });
 }
 
 export async function getProducts() {
@@ -434,6 +485,11 @@ export const api = {
   getPaymentHistory,
   getProducts,
   getProductsByCategory,
+  // Life Insurance Applications
+  createLifeApplication,
+  getUserLifeApplications,
+  getLifeApplicationById,
+  updateLifeApplication,
   login,
   getUserByEmail,
   createUser

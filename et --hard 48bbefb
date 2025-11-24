@@ -1,0 +1,14 @@
+[33m27bddb4[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mdev_vipul[m[33m, [m[1;31morigin/dev_vipul[m[33m)[m HEAD@{0}: commit: profile updated
+[33m48bbefb[m HEAD@{1}: pull origin dev_vipul: Fast-forward
+[33meb46006[m HEAD@{2}: reset: moving to HEAD
+[33meb46006[m HEAD@{3}: commit: added life insurance in policytype in schemas.py
+[33md897349[m HEAD@{4}: checkout: moving from main to dev_vipul
+[33m613f53c[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m HEAD@{5}: reset: moving to origin/main
+[33m613f53c[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m HEAD@{6}: reset: moving to HEAD
+[33m613f53c[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m HEAD@{7}: checkout: moving from dev_vipul to main
+[33md897349[m HEAD@{8}: checkout: moving from main to dev_vipul
+[33m613f53c[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m HEAD@{9}: reset: moving to origin/main
+[33m613f53c[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m HEAD@{10}: checkout: moving from dev_vipul to main
+[33md897349[m HEAD@{11}: commit: fixed login signup
+[33m3d6695d[m HEAD@{12}: checkout: moving from main to dev_vipul
+[33m613f53c[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m HEAD@{13}: clone: from https://github.com/chandan-akshronix/insurance-ai-frontend.git

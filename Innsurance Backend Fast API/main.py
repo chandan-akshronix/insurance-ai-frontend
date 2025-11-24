@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from database import engine, Base
-from routers import users, policy, claims, products, contact, quotation, documents, nominee, activities, notifications, payments, auth, public
+from routers import users, policy, claims, products, contact, quotation, documents, nominee, activities, notifications, payments, auth, public, life_insurance
 from models import *
 import os
 from dotenv import load_dotenv
+from mongo import connect_to_mongo, close_mongo
 
 load_dotenv()
 
@@ -55,6 +57,29 @@ app.include_router(nominee.router)
 app.include_router(activities.router)
 app.include_router(notifications.router)
 app.include_router(payments.router)
+app.include_router(life_insurance.router)
+
+# Mount local uploads folder for development fallback when Azure is not configured
+uploads_dir = os.path.join(os.getcwd(), 'uploads')
+os.makedirs(uploads_dir, exist_ok=True)
+app.mount('/uploads', StaticFiles(directory=uploads_dir), name='uploads')
+
+
+@app.on_event("startup")
+async def startup_events():
+    # connect to MongoDB
+    try:
+        await connect_to_mongo(app)
+    except Exception:
+        logger.exception('Failed to connect to MongoDB during startup')
+
+
+@app.on_event("shutdown")
+async def shutdown_events():
+    try:
+        await close_mongo(app)
+    except Exception:
+        logger.exception('Failed to close MongoDB client during shutdown')
 
 @app.get("/")
 def root():

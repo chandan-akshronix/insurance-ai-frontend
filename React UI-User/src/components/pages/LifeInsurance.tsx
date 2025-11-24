@@ -23,6 +23,7 @@ import { Progress } from '../ui/progress';
 import { Switch } from '../ui/switch';
 import { Separator } from '../ui/separator';
 import { useAuth } from '../../contexts/AuthContext';
+import { createLifeApplication, uploadDocument } from '../../services/api';
 
 const insurers = [
   { id: 'hdfc', name: 'HDFC Life', rating: 4.7, claimSettlement: 98.5, logo: '🏛️' },
@@ -73,7 +74,15 @@ export default function LifeInsurance() {
   const { user, isAuthenticated } = useAuth();
   const [step, setStep] = useState(1);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<Array<{
+    file: File;
+    type: string;
+    progress: number;
+    uploading: boolean;
+    error?: string | null;
+    uploadedUrl?: string | null;
+    documentId?: any;
+  }>>([]);
   const [showAIAssistant, setShowAIAssistant] = useState(true);
   const [assistantMessage, setAssistantMessage] = useState('Upload your documents and I\'ll help fill your details automatically!');
   const [policyNumber, setPolicyNumber] = useState('');
@@ -203,11 +212,57 @@ export default function LifeInsurance() {
   // Handle file upload
   const handleFileUpload = useCallback((files: FileList | null) => {
     if (!files) return;
-    
-    const fileArray = Array.from(files);
+    const fileArray = Array.from(files).map(f => ({
+      file: f,
+      type: 'kyc_document',
+      progress: 0,
+      uploading: false,
+      error: null,
+      uploadedUrl: null,
+      documentId: null
+    }));
     setUploadedFiles(prev => [...prev, ...fileArray]);
-    toast.success(`${fileArray.length} file(s) uploaded successfully`);
+    toast.success(`${fileArray.length} file(s) queued for upload`);
   }, []);
+
+  // Upload a single file by index (used for retry or individual upload)
+  const uploadFileAtIndex = async (index: number) => {
+    const fileObj = uploadedFiles[index];
+    if (!fileObj) return null;
+    const userIdForUpload = user?.id || localStorage.getItem('userId') || '1';
+
+    // mark uploading
+    setUploadedFiles(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], uploading: true, progress: 0, error: null };
+      return next;
+    });
+
+    try {
+      const res = await uploadDocument(fileObj.file, fileObj.type, userIdForUpload, undefined, (p) => {
+        setUploadedFiles(prev => {
+          const next = [...prev];
+          next[index] = { ...next[index], progress: p };
+          return next;
+        });
+      });
+
+      setUploadedFiles(prev => {
+        const next = [...prev];
+        next[index] = { ...next[index], uploading: false, progress: 100, uploadedUrl: res.fileUrl || res.fileurl || null, documentId: res.documentId || res.documentId || res.documentId || null };
+        return next;
+      });
+
+      return res;
+    } catch (e: any) {
+      setUploadedFiles(prev => {
+        const next = [...prev];
+        next[index] = { ...next[index], uploading: false, error: e?.message || 'Upload failed' };
+        return next;
+      });
+      throw e;
+    }
+  };
 
   // Handle drag and drop
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -415,12 +470,148 @@ export default function LifeInsurance() {
     changeStep(step + 1);
   };
 
-  // Handle payment
-  const handlePayment = () => {
-    const newPolicyNumber = `LIFE${Date.now()}`;
-    setPolicyNumber(newPolicyNumber);
-    toast.success('Payment processed successfully!');
-    setAssistantMessage('Your Life Insurance Policy is Active 🎉. Your e-policy has been sent to your registered email.');
+  // Handle payment — create application then simulate payment success
+  const handlePayment = async () => {
+    setIsProcessing(true);
+    try {
+      // First upload files to backend and collect returned URLs
+      const userIdForUpload = user?.id || localStorage.getItem('userId') || '1';
+      const uploadedDocs: any[] = [];
+
+      if (uploadedFiles.length > 0) {
+        try {
+          // upload files in parallel but track progress per-file
+          const uploadPromises = uploadedFiles.map((fileObj, idx) =>
+            uploadDocument(fileObj.file, fileObj.type, userIdForUpload, undefined, (p) => {
+              setUploadedFiles(prev => {
+                const next = [...prev];
+                next[idx] = { ...next[idx], progress: p };
+                return next;
+              });
+            }).then((res) => {
+              // update uploaded url and id
+              setUploadedFiles(prev => {
+                const next = [...prev];
+                next[idx] = { ...next[idx], uploadedUrl: res.fileUrl || res.fileurl || null, documentId: res.documentId || res.document_id || null, progress: 100, uploading: false };
+                return next;
+              });
+              return res;
+            }).catch((err) => {
+              setUploadedFiles(prev => {
+                const next = [...prev];
+                next[idx] = { ...next[idx], uploading: false, error: err?.message || 'Upload failed' };
+                return next;
+              });
+              throw err;
+            })
+          );
+
+          const uploadResults = await Promise.all(uploadPromises);
+          for (const r of uploadResults) {
+            if (r && (r.fileUrl || r.fileurl)) {
+              uploadedDocs.push({ filename: r.fileName || r.file || null, url: r.fileUrl || r.fileurl, documentId: r.documentId || r.document_id || null, docType: 'kyc' });
+            }
+          }
+        } catch (e) {
+          console.error('Document upload failed', e);
+          toast.error('Failed to upload documents. Please try again.');
+          setIsProcessing(false);
+          return;
+        }
+      }
+
+      // Build payload for application including uploaded document URLs
+      const payload = {
+        user_id: user?.id || localStorage.getItem('userId') || 'unknown',
+        status: 'submitted',
+        personal_details: {
+          fullName: formData.fullName,
+          dob: formData.dob,
+          gender: formData.gender,
+          address: formData.address,
+          panNumber: formData.panNumber,
+          occupation: formData.occupation,
+          annualIncome: formData.annualIncome
+        },
+        contact_info: {
+          phone: formData.phone,
+          email: formData.email
+        },
+        documents: uploadedDocs,
+        coverage_selection: {
+          coverageAmount: formData.coverageAmount,
+          term: formData.term,
+          selectedPlan: formData.selectedPlan
+        },
+        riders: formData.selectedRiders.map((r: string) => ({ rider_id: r })),
+        health_info: {
+          weight: formData.weight,
+          height: formData.height,
+          tobacco: formData.tobacco,
+          alcohol: formData.alcohol
+        },
+        nominee_details: {
+          name: formData.nomineeName,
+          relation: formData.nomineeRelation,
+          dob: formData.nomineeDOB,
+          contact: formData.nomineeContact
+        },
+        kyc_verification: { policyholder: userKycStatus, nominee: nomineeKycStatus },
+        payment: { method: formData.paymentMethod, status: 'processing' }
+      };
+      
+      // Attach a minimal `policy` object so backend can create a SQL Policy
+      // and record its id on the Mongo application document.
+      const selectedPlan = planVariants.find(p => p.id === formData.selectedPlan);
+      const policyPayload: any = {
+        userId: user?.id || localStorage.getItem('userId') || undefined,
+        type: 'life_insurance',
+        planName: selectedPlan?.name || 'Life Plan',
+        coverage: formData.coverageAmount || selectedPlan?.coverage || 0,
+        premium: calculateTotalPremium(),
+        tenure: formData.term,
+        personalDetails: {
+          fullName: formData.fullName,
+          dob: formData.dob,
+          gender: formData.gender,
+          address: formData.address,
+          panNumber: formData.panNumber
+        },
+        nominee: formData.nomineeName || undefined,
+        nomineeId: undefined
+      };
+
+      // attach policy to payload so backend creates SQL Policy and stores its id
+      payload.policy = policyPayload;
+
+      const res = await createLifeApplication(payload);
+      const appId = res?.id;
+
+      // Simulate payment then update payment status
+      const newPolicyNumber = `LIFE${Date.now()}`;
+      setPolicyNumber(newPolicyNumber);
+      toast.success('Payment processed successfully!');
+      setAssistantMessage('Your Life Insurance Policy is Active 🎉. Your e-policy has been sent to your registered email.');
+
+      // Optionally update the application payment status
+      if (appId) {
+        try {
+          await fetch(`http://localhost:8000/life-insurance/${appId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ payment: { method: formData.paymentMethod, status: 'paid', paid_at: new Date().toISOString() } })
+          });
+        } catch (e) {
+          // Non-fatal
+          console.warn('Failed to update payment status on application', e);
+        }
+      }
+    } catch (e: any) {
+      console.error(e);
+      toast.error('Failed to submit application. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   // Toggle rider
@@ -591,11 +782,56 @@ export default function LifeInsurance() {
                     {uploadedFiles.length > 0 && (
                       <div className="space-y-2">
                         <Label>Uploaded Files ({uploadedFiles.length})</Label>
-                        {uploadedFiles.map((file, idx) => (
+                        {uploadedFiles.map((fobj, idx) => (
                           <div key={idx} className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
                             <FileCheck className="w-5 h-5 text-green-600" />
-                            <span className="flex-1 text-sm">{file.name}</span>
-                            <CheckCircle className="w-5 h-5 text-green-600" />
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium">{fobj.file.name}</span>
+                                <select
+                                  value={fobj.type}
+                                  onChange={(e) => {
+                                    const t = e.target.value;
+                                    setUploadedFiles(prev => {
+                                      const next = [...prev];
+                                      next[idx] = { ...next[idx], type: t };
+                                      return next;
+                                    });
+                                  }}
+                                  className="text-xs rounded px-2 py-1 border"
+                                >
+                                  <option value="kyc_document">KYC Document</option>
+                                  <option value="id_card">ID Card</option>
+                                  <option value="pan_card">PAN</option>
+                                  <option value="policy_document">Previous Policy</option>
+                                  <option value="other">Other</option>
+                                </select>
+                              </div>
+
+                              <div className="mt-2">
+                                <div className="w-full bg-gray-200 h-2 rounded overflow-hidden">
+                                  <div className="h-2 bg-green-500" style={{ width: `${fobj.progress}%` }} />
+                                </div>
+                                <div className="flex items-center justify-between text-xs mt-1">
+                                  <span>{fobj.progress}%</span>
+                                  <span className="text-red-600">{fobj.error || ''}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                              {fobj.uploading ? (
+                                <span className="text-xs">Uploading...</span>
+                              ) : fobj.uploadedUrl ? (
+                                <CheckCircle className="w-5 h-5 text-green-600" />
+                              ) : (
+                                <button
+                                  className="text-xs underline"
+                                  onClick={() => uploadFileAtIndex(idx)}
+                                >
+                                  Upload
+                                </button>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
