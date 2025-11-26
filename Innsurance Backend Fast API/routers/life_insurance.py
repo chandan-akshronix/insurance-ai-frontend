@@ -14,12 +14,14 @@ router = APIRouter(prefix="/life-insurance", tags=["life_insurance"])
 
 
 def _oid_str(doc: dict):
+    """Helper to normalize MongoDB document: keep _id as string if it already is,
+    or convert ObjectId to string. This ensures JSON output shows plain string id."""
     if not doc:
         return doc
     doc = dict(doc)
     if '_id' in doc:
-        doc['id'] = str(doc['_id'])
-        doc.pop('_id', None)
+        # If _id is already a string, keep it; if ObjectId, convert to string
+        doc['_id'] = str(doc['_id']) if doc['_id'] else None
     return doc
 
 
@@ -78,8 +80,11 @@ async def create_application(request: Request, payload: dict):
     # only set timestamps if not provided
     doc.setdefault('created_at', now)
     doc['updated_at'] = now
-    res = await coll.insert_one(doc)
-    return {'id': str(res.inserted_id)}
+    # Generate a string id upfront so we can store it as _id directly (avoid ObjectId wrapper in JSON)
+    doc_id = str(ObjectId())
+    doc['_id'] = doc_id
+    await coll.insert_one(doc)
+    return {'id': doc_id}
 
 
 @router.get('/user/{user_id}', response_model=List[dict])
@@ -95,11 +100,8 @@ async def get_applications_for_user(request: Request, user_id: str):
 async def get_application(request: Request, app_id: str):
     db = request.app.mongodb
     coll = db.get_collection('life_insurance_applications')
-    try:
-        obj = ObjectId(app_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail='Invalid id')
-    doc = await coll.find_one({'_id': obj})
+    # Query using string _id directly (no ObjectId conversion)
+    doc = await coll.find_one({'_id': app_id})
     if not doc:
         raise HTTPException(status_code=404, detail='Not found')
     return _oid_str(doc)
@@ -109,26 +111,20 @@ async def get_application(request: Request, app_id: str):
 async def update_application(request: Request, app_id: str, payload: dict):
     db = request.app.mongodb
     coll = db.get_collection('life_insurance_applications')
-    try:
-        obj = ObjectId(app_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail='Invalid id')
+    # Query using string _id directly (no ObjectId conversion)
     payload['updated_at'] = datetime.utcnow()
-    res = await coll.update_one({'_id': obj}, {'$set': payload})
+    res = await coll.update_one({'_id': app_id}, {'$set': payload})
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail='Not found')
-    return { 'modified_count': res.modified_count }
+    return {'modified_count': res.modified_count}
 
 
 @router.delete('/{app_id}', status_code=status.HTTP_204_NO_CONTENT)
 async def delete_application(request: Request, app_id: str):
     db = request.app.mongodb
     coll = db.get_collection('life_insurance_applications')
-    try:
-        obj = ObjectId(app_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail='Invalid id')
-    res = await coll.delete_one({'_id': obj})
+    # Query using string _id directly (no ObjectId conversion)
+    res = await coll.delete_one({'_id': app_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail='Not found')
     return {}
