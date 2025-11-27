@@ -1,3 +1,18 @@
+/**
+ * AdminDashboard Component
+ * 
+ * NOTE: This is the OLD simple admin dashboard component.
+ * 
+ * The main admin panel is now handled by AdminPanelApp component which
+ * integrates the full admin_panel folder interface.
+ * 
+ * This component is kept as a backup/alternative simple dashboard view.
+ * It can be used for a simpler admin interface if needed, or removed
+ * if not required.
+ * 
+ * Current active admin panel: AdminPanelApp (imports from admin_panel folder)
+ * Route: /admin → AdminPanelApp
+ */
 import { useState, useEffect } from 'react';
 import { Users, FileText, TrendingUp, DollarSign, AlertCircle, CheckCircle, Clock, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -5,6 +20,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { getAdminStats, getAdminClaims, getAdminUsers } from '../../services/api';
+import { toast } from 'sonner';
 
 export default function AdminDashboard() {
   const [selectedTab, setSelectedTab] = useState('overview');
@@ -12,22 +28,31 @@ export default function AdminDashboard() {
   const [claims, setClaims] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        setError(null);
         const [statsData, claimsData, usersData] = await Promise.all([
           getAdminStats(),
           getAdminClaims(),
           getAdminUsers()
         ]);
 
-        setStats(statsData);
-        setClaims(claimsData.claims || []);
-        setUsers(usersData.users || []);
-      } catch (error) {
+        setStats(statsData || {});
+        // Handle both wrapped and direct array responses
+        setClaims(Array.isArray(claimsData) ? claimsData : (claimsData?.claims || []));
+        setUsers(Array.isArray(usersData) ? usersData : (usersData?.users || []));
+      } catch (error: any) {
         console.error('Error fetching admin data:', error);
+        setError('Failed to load admin dashboard data. Please try again.');
+        toast.error('Failed to load admin dashboard data');
+        // Set default empty values to prevent crashes
+        setStats({});
+        setClaims([]);
+        setUsers([]);
       } finally {
         setLoading(false);
       }
@@ -69,17 +94,45 @@ export default function AdminDashboard() {
   if (loading) {
     return (
       <div className="pt-[70px] min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading admin dashboard...</p>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading admin dashboard...</p>
+        </div>
       </div>
     );
   }
 
-  const statsArray = [
-    { icon: Users, label: 'Total Users', value: stats.totalUsers.toLocaleString(), change: `+${stats.userGrowth}%`, trend: 'up' },
-    { icon: FileText, label: 'Active Policies', value: stats.activePolicies.toLocaleString(), change: `+${stats.policyGrowth}%`, trend: 'up' },
-    { icon: TrendingUp, label: 'Claims Processed', value: stats.claimsProcessed.toLocaleString(), change: `+${stats.claimsGrowth}%`, trend: 'up' },
-    { icon: DollarSign, label: 'Revenue', value: stats.revenue, change: `+${stats.revenueGrowth}%`, trend: 'up' }
-  ];
+  // Safe stats array with fallback values
+  const statsArray = stats ? [
+    { 
+      icon: Users, 
+      label: 'Total Users', 
+      value: (stats.totalUsers || 0).toLocaleString(), 
+      change: stats.userGrowth !== undefined ? `+${stats.userGrowth}%` : 'N/A', 
+      trend: 'up' 
+    },
+    { 
+      icon: FileText, 
+      label: 'Active Policies', 
+      value: (stats.activePolicies || stats.totalPolicies || 0).toLocaleString(), 
+      change: stats.policyGrowth !== undefined ? `+${stats.policyGrowth}%` : 'N/A', 
+      trend: 'up' 
+    },
+    { 
+      icon: TrendingUp, 
+      label: 'Claims Processed', 
+      value: (stats.claimsProcessed || stats.totalClaims || stats.claimsResolved || 0).toLocaleString(), 
+      change: stats.claimsGrowth !== undefined ? `+${stats.claimsGrowth}%` : 'N/A', 
+      trend: 'up' 
+    },
+    { 
+      icon: DollarSign, 
+      label: 'Revenue', 
+      value: stats.revenue || '₹0', 
+      change: stats.revenueGrowth !== undefined ? `+${stats.revenueGrowth}%` : 'N/A', 
+      trend: 'up' 
+    }
+  ] : [];
 
   return (
     <div className="pt-[70px] min-h-screen bg-background">
@@ -88,6 +141,11 @@ export default function AdminDashboard() {
         <div className="mb-8">
           <h1 className="mb-2">Admin Dashboard</h1>
           <p className="text-muted-foreground">Manage your insurance platform</p>
+          {error && (
+            <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+              <p className="text-destructive text-sm">{error}</p>
+            </div>
+          )}
         </div>
 
         {/* Stats Grid */}
@@ -127,25 +185,29 @@ export default function AdminDashboard() {
                   <CardTitle>Recent Claims</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {claims.slice(0, 4).map((claim) => (
-                      <div key={claim.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="flex items-center gap-3">
-                          {getStatusIcon(claim.status)}
-                          <div>
-                            <p className="font-medium">{claim.claimNumber}</p>
-                            <p className="text-sm text-muted-foreground">{claim.userName}</p>
+                  {claims.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-8">No recent claims</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {claims.slice(0, 4).map((claim) => (
+                        <div key={claim.id || claim.claimId} className="flex items-center justify-between p-4 border rounded-lg">
+                          <div className="flex items-center gap-3">
+                            {getStatusIcon(claim.status)}
+                            <div>
+                              <p className="font-medium">{claim.claimNumber || claim.claim_id || 'N/A'}</p>
+                              <p className="text-sm text-muted-foreground">{claim.userName || claim.user_name || 'Unknown User'}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-medium">{claim.amount || claim.claimAmount || 'N/A'}</p>
+                            <Badge className={getStatusColor(claim.status || 'pending')}>
+                              {claim.status || 'pending'}
+                            </Badge>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="font-medium">{claim.amount}</p>
-                          <Badge className={getStatusColor(claim.status)}>
-                            {claim.status}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -155,25 +217,29 @@ export default function AdminDashboard() {
                   <CardTitle>New Users</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {users.slice(0, 3).map((user) => (
-                      <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-primary to-cyan-500 rounded-full flex items-center justify-center text-white">
-                            {user.name.charAt(0)}
+                  {users.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-8">No users found</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {users.slice(0, 3).map((user) => (
+                        <div key={user.id || user.userId} className="flex items-center justify-between p-4 border rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-primary to-cyan-500 rounded-full flex items-center justify-center text-white">
+                              {(user.name || 'U').charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="font-medium">{user.name || 'Unknown'}</p>
+                              <p className="text-sm text-muted-foreground">{user.email || 'No email'}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium">{user.name}</p>
-                            <p className="text-sm text-muted-foreground">{user.email}</p>
+                          <div className="text-right">
+                            <p className="text-sm font-medium">{user.policies || 0} policies</p>
+                            <p className="text-xs text-muted-foreground">{user.joinedDate || user.joined_date || 'N/A'}</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm font-medium">{user.policies} policies</p>
-                          <p className="text-xs text-muted-foreground">{user.joinedDate}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -199,40 +265,48 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {claims.map((claim) => (
-                        <tr key={claim.id} className="border-b hover:bg-slate-50">
-                          <td className="p-4">{claim.claimNumber}</td>
-                          <td className="p-4">
-                            <div>
-                              <p>{claim.userName}</p>
-                              <p className="text-sm text-muted-foreground">{claim.userEmail}</p>
-                            </div>
-                          </td>
-                          <td className="p-4">{claim.type}</td>
-                          <td className="p-4">{claim.amount}</td>
-                          <td className="p-4">
-                            <Badge className={getStatusColor(claim.status)}>
-                              {claim.status}
-                            </Badge>
-                          </td>
-                          <td className="p-4">{claim.submittedDate}</td>
-                          <td className="p-4">
-                            <div className="flex gap-2">
-                              <Button size="sm" variant="outline">View</Button>
-                              {claim.status === 'pending' && (
-                                <>
-                                  <Button size="sm" variant="default" className="bg-green-600 hover:bg-green-700">
-                                    Approve
-                                  </Button>
-                                  <Button size="sm" variant="destructive">
-                                    Reject
-                                  </Button>
-                                </>
-                              )}
-                            </div>
+                      {claims.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                            No claims found
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        claims.map((claim) => (
+                          <tr key={claim.id || claim.claimId} className="border-b hover:bg-slate-50">
+                            <td className="p-4">{claim.claimNumber || claim.claim_id || 'N/A'}</td>
+                            <td className="p-4">
+                              <div>
+                                <p>{claim.userName || claim.user_name || 'Unknown'}</p>
+                                <p className="text-sm text-muted-foreground">{claim.userEmail || claim.user_email || 'N/A'}</p>
+                              </div>
+                            </td>
+                            <td className="p-4">{claim.type || claim.claimType || 'N/A'}</td>
+                            <td className="p-4">{claim.amount || claim.claimAmount || 'N/A'}</td>
+                            <td className="p-4">
+                              <Badge className={getStatusColor(claim.status || 'pending')}>
+                                {claim.status || 'pending'}
+                              </Badge>
+                            </td>
+                            <td className="p-4">{claim.submittedDate || claim.submitted_date || claim.createdAt || 'N/A'}</td>
+                            <td className="p-4">
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="outline">View</Button>
+                                {(claim.status || 'pending') === 'pending' && (
+                                  <>
+                                    <Button size="sm" variant="default" className="bg-green-600 hover:bg-green-700">
+                                      Approve
+                                    </Button>
+                                    <Button size="sm" variant="destructive">
+                                      Reject
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -261,24 +335,32 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {users.map((user) => (
-                        <tr key={user.id} className="border-b hover:bg-slate-50">
-                          <td className="p-4">{user.name}</td>
-                          <td className="p-4">{user.email}</td>
-                          <td className="p-4">{user.phone}</td>
-                          <td className="p-4">{user.policies}</td>
-                          <td className="p-4">{user.totalPremium}</td>
-                          <td className="p-4">
-                            <Badge className={user.kycStatus === 'verified' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
-                              {user.kycStatus}
-                            </Badge>
-                          </td>
-                          <td className="p-4">{user.joinedDate}</td>
-                          <td className="p-4">
-                            <Button size="sm" variant="outline">View</Button>
+                      {users.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="p-8 text-center text-muted-foreground">
+                            No users found
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        users.map((user) => (
+                          <tr key={user.id || user.userId} className="border-b hover:bg-slate-50">
+                            <td className="p-4">{user.name || 'Unknown'}</td>
+                            <td className="p-4">{user.email || 'N/A'}</td>
+                            <td className="p-4">{user.phone || 'N/A'}</td>
+                            <td className="p-4">{user.policies || 0}</td>
+                            <td className="p-4">{user.totalPremium || user.total_premium || '₹0'}</td>
+                            <td className="p-4">
+                              <Badge className={(user.kycStatus || user.kyc_status || 'pending') === 'verified' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
+                                {user.kycStatus || user.kyc_status || 'pending'}
+                              </Badge>
+                            </td>
+                            <td className="p-4">{user.joinedDate || user.joined_date || 'N/A'}</td>
+                            <td className="p-4">
+                              <Button size="sm" variant="outline">View</Button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>

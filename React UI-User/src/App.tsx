@@ -3,6 +3,7 @@ import {
   Routes,
   Route,
   Navigate,
+  useLocation,
 } from "react-router-dom";
 import { Toaster } from "./components/ui/sonner";
 import { AuthProvider } from "./contexts/AuthContext";
@@ -20,7 +21,7 @@ import Quotes from "./components/pages/Quotes";
 import Confirmation from "./components/pages/Confirmation";
 import Dashboard from "./components/pages/Dashboard";
 import Profile from "./components/pages/Profile";
-import AdminDashboard from "./components/pages/AdminDashboard";
+import AdminPanelApp from "./components/AdminPanelApp";
 import ClaimsSubmit from "./components/pages/ClaimsSubmit";
 import ClaimsTrack from "./components/pages/ClaimsTrack";
 import CarClaim from "./components/pages/CarClaim";
@@ -28,14 +29,26 @@ import Contact from "./components/pages/Contact";
 import FAQ from "./components/pages/FAQ";
 import Terms from "./components/pages/Terms";
 
-export default function App() {
+/**
+ * AppContent Component
+ * 
+ * Main application content wrapper with conditional layout rendering.
+ * 
+ * Layout Isolation:
+ * - On admin routes (/admin), Navigation, Footer, and AIAssistant are hidden
+ * - AdminPanelApp handles its own full-screen layout with sidebar
+ * - On all other routes, standard layout with Navigation/Footer is shown
+ */
+function AppContent() {
+  const location = useLocation();
+  // Hide Navigation/Footer on admin routes for full-screen admin panel experience
+  const isAdminRoute = location.pathname.startsWith('/admin');
+
   return (
-    <Router>
-      <AuthProvider>
-        <div className="min-h-screen flex flex-col">
-          <Navigation />
-          <main className="flex-1">
-            <Routes>
+    <div className="min-h-screen flex flex-col">
+      {!isAdminRoute && <Navigation />}
+      <main className="flex-1">
+        <Routes>
               {/* Public Routes */}
               <Route path="/" element={<Homepage />} />
               <Route path="/login" element={<Login />} />
@@ -126,12 +139,18 @@ export default function App() {
                 }
               />
 
-              {/* Admin Only Route */}
+              {/* Admin Only Route - Full Admin Panel Interface */}
+              {/* 
+                AdminPanelApp integrates the complete admin_panel folder interface.
+                It imports all components directly from the separate admin_panel folder,
+                maintaining the exact design and functionality of the original admin panel.
+                The admin panel renders in full-screen mode without Navigation/Footer.
+              */}
               <Route
                 path="/admin"
                 element={
                   <ProtectedRoute requireAdmin>
-                    <AdminDashboard />
+                    <AdminPanelApp />
                   </ProtectedRoute>
                 }
               />
@@ -142,10 +161,18 @@ export default function App() {
               />
             </Routes>
           </main>
-          <Footer />
-          <AIAssistant />
+          {!isAdminRoute && <Footer />}
+          {!isAdminRoute && <AIAssistant />}
           <Toaster />
         </div>
+  );
+}
+
+export default function App() {
+  return (
+    <Router>
+      <AuthProvider>
+        <AppContent />
       </AuthProvider>
     </Router>
   );
