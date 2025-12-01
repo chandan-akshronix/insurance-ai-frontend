@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import '@admin-panel/index.css';
 // Import all components directly from admin_panel folder using path alias
 import { Sidebar } from '@admin-panel/components/Sidebar';
+import { AdminHeader } from '@admin-panel/components/AdminHeader';
 import { DashboardOverview } from '@admin-panel/components/DashboardOverview';
 import { ClaimsPipeline } from '@admin-panel/components/ClaimsPipeline';
 import { AIProcessFlow } from '@admin-panel/components/AIProcessFlow';
@@ -41,14 +42,6 @@ export default function AdminPanelApp() {
     navigate('/profile');
   };
 
-  const handleNavigateToDashboard = () => {
-    navigate('/dashboard');
-  };
-
-  const handleNavigateToMyClaims = () => {
-    navigate('/claims/track');
-  };
-
   const handleNavigateToAdminPanel = () => {
     navigate('/admin');
   };
@@ -57,6 +50,20 @@ export default function AdminPanelApp() {
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  // Get page title based on active view
+  const getPageTitle = () => {
+    const titles: Record<string, string> = {
+      'overview': 'Dashboard Overview',
+      'pipeline': 'Claims Pipeline',
+      'aiprocess': 'Application Process',
+      'agents': 'Agent Performance',
+      'review': 'Human Review Queue',
+      'audit': 'Audit Log',
+      'settings': 'Settings & Access Control'
+    };
+    return titles[activeView] || 'Dashboard';
   };
 
   const renderContent = () => {
@@ -83,23 +90,34 @@ export default function AdminPanelApp() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      <Sidebar 
-        activeView={activeView} 
-        onNavigate={handleNavigation}
-        collapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-        onNavigateToProfile={handleNavigateToProfile}
-        onNavigateToDashboard={handleNavigateToDashboard}
-        onNavigateToMyClaims={handleNavigateToMyClaims}
-        onNavigateToAdminPanel={handleNavigateToAdminPanel}
-        onLogout={handleLogout}
+    <div className="flex flex-col h-screen bg-gray-50">
+      {/* Header - Fixed at top */}
+      <AdminHeader
         userName={user?.name || "Admin"}
         userEmail={user?.email || "admin@insurance.com"}
+        onNavigateToProfile={handleNavigateToProfile}
+        onNavigateToAdminPanel={handleNavigateToAdminPanel}
+        onLogout={handleLogout}
+        currentPageTitle={getPageTitle()}
       />
-      <main className="flex-1 overflow-auto">
-        {renderContent()}
-      </main>
+      
+      {/* Main Content Area with Sidebar - Starts below header (70px) */}
+      <div className="flex flex-1 overflow-hidden" style={{ marginTop: '70px', height: 'calc(100vh - 70px)' }}>
+        <Sidebar 
+          activeView={activeView} 
+          onNavigate={handleNavigation}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onNavigateToProfile={handleNavigateToProfile}
+          onNavigateToAdminPanel={handleNavigateToAdminPanel}
+          onLogout={handleLogout}
+          userName={user?.name || "Admin"}
+          userEmail={user?.email || "admin@insurance.com"}
+        />
+        <main className="flex-1 overflow-auto bg-gray-50">
+          {renderContent()}
+        </main>
+      </div>
       <Toaster position="top-right" richColors />
     </div>
   );

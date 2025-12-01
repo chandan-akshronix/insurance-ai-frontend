@@ -1,4 +1,4 @@
-import { LayoutDashboard, Workflow, Activity, UserCheck, ScrollText, Settings, GitBranch, Menu, User, FileText, LogOut, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, Workflow, Activity, UserCheck, ScrollText, Settings, GitBranch, Menu, User, LogOut, ChevronDown } from 'lucide-react';
 import { cn } from './ui/utils';
 import { Button } from './ui/button';
 import {
@@ -18,8 +18,6 @@ interface SidebarProps {
   onToggleCollapse: () => void;
   // Navigation and logout handlers (optional - will use window.location if not provided)
   onNavigateToProfile?: () => void;
-  onNavigateToDashboard?: () => void;
-  onNavigateToMyClaims?: () => void;
   onNavigateToAdminPanel?: () => void;
   onLogout?: () => void;
   // User data (optional - will use defaults if not provided)
@@ -43,8 +41,6 @@ export function Sidebar({
   collapsed, 
   onToggleCollapse,
   onNavigateToProfile,
-  onNavigateToDashboard,
-  onNavigateToMyClaims,
   onNavigateToAdminPanel,
   onLogout,
   userName = "Admin",
@@ -78,22 +74,6 @@ export function Sidebar({
     }
   };
 
-  const handleDashboard = () => {
-    if (onNavigateToDashboard) {
-      onNavigateToDashboard();
-    } else {
-      window.location.href = '/dashboard';
-    }
-  };
-
-  const handleMyClaims = () => {
-    if (onNavigateToMyClaims) {
-      onNavigateToMyClaims();
-    } else {
-      window.location.href = '/claims/track';
-    }
-  };
-
   const handleAdminPanel = () => {
     if (onNavigateToAdminPanel) {
       onNavigateToAdminPanel();
@@ -117,7 +97,7 @@ export function Sidebar({
 
   return (
     <aside className={cn(
-      "bg-white border-r border-gray-100 flex flex-col shadow-sm transition-all duration-300",
+      "bg-white border-r border-gray-100 flex flex-col shadow-sm transition-all duration-300 h-full",
       collapsed ? "w-20" : "w-72"
     )}>
       <div className={cn(
@@ -225,14 +205,6 @@ export function Sidebar({
             <DropdownMenuItem onClick={handleProfile} className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
               <User className="w-4 h-4 mr-2" />
               Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleDashboard} className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
-              <LayoutDashboard className="w-4 h-4 mr-2" />
-              Dashboard
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleMyClaims} className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
-              <FileText className="w-4 h-4 mr-2" />
-              My Claims
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleAdminPanel} className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
               <Settings className="w-4 h-4 mr-2" />

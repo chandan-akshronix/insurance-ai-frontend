@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, Menu, X, ChevronDown, User, LogOut, LayoutDashboard, Settings, FileText } from 'lucide-react';
+import { Search, Menu, X, ChevronDown, User, LogOut, Settings, LayoutDashboard, FileText } from 'lucide-react';
 import { Button } from './ui/button';
 import {
   DropdownMenu,
@@ -160,11 +160,13 @@ export default function Navigation() {
               </Button>
             </Link>
           )}
-          <Link to="/dashboard">
-            <Button className="bg-gradient-to-r from-primary to-cyan-500 text-white hover:opacity-90">
-              Get Started
-            </Button>
-          </Link>
+          {!isAuthenticated && (
+            <Link to="/dashboard">
+              <Button className="bg-gradient-to-r from-primary to-cyan-500 text-white hover:opacity-90">
+                Get Started
+              </Button>
+            </Link>
+          )}
         </div>
 
         {/* Mobile Menu Toggle */}
