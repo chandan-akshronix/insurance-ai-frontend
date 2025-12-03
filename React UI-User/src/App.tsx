@@ -15,6 +15,7 @@ import Homepage from "./components/pages/Homepage";
 import Login from "./components/pages/Login";
 import AboutUs from "./components/pages/AboutUs";
 import LifeInsurance from "./components/pages/LifeInsurance";
+import LifeInsuranceBrochure from "./components/pages/LifeInsuranceBrochure";
 import CarInsurance from "./components/pages/CarInsurance";
 import HealthInsurance from "./components/pages/HealthInsurance";
 import Quotes from "./components/pages/Quotes";
@@ -57,15 +58,23 @@ function AppContent() {
               <Route path="/faq" element={<FAQ />} />
               <Route path="/terms" element={<Terms />} />
 
-              {/* Protected Routes - Require Login */}
+              {/* Life Insurance Routes */}
+              {/* Brochure page - Public so users can view before signing up */}
               <Route
                 path="/life-insurance"
+                element={<LifeInsuranceBrochure />}
+              />
+              {/* Application form - Protected, requires login */}
+              <Route
+                path="/life-insurance/apply"
                 element={
                   <ProtectedRoute>
                     <LifeInsurance />
                   </ProtectedRoute>
                 }
               />
+
+              {/* Other Protected Routes - Require Login */}
               <Route
                 path="/car-insurance"
                 element={

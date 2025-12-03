@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { 
   Upload, FileText, CheckCircle, AlertCircle, Sparkles, Bot, 
   User, Phone, Shield, Plus, TrendingUp, Heart, Users, Lock, 
@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Slider } from '../ui/slider';
 import { motion, AnimatePresence } from 'motion/react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner@2.0.3';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { Alert, AlertDescription } from '../ui/alert';
@@ -71,6 +71,7 @@ const planVariants = [
 
 export default function LifeInsurance() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, isAuthenticated } = useAuth();
   const [step, setStep] = useState(1);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -649,6 +650,23 @@ export default function LifeInsurance() {
     }));
   };
 
+  // Handle plan parameter from URL (when coming from brochure)
+  useEffect(() => {
+    const planParam = searchParams.get('plan');
+    if (planParam && ['basic', 'smart', 'premium'].includes(planParam)) {
+      const selectedPlanData = planVariants.find(p => p.id === planParam);
+      if (selectedPlanData) {
+        setFormData(prev => ({
+          ...prev,
+          selectedPlan: planParam,
+          coverageAmount: selectedPlanData.coverage,
+          term: selectedPlanData.term
+        }));
+        toast.success(`${selectedPlanData.name} pre-selected from brochure`);
+      }
+    }
+  }, [searchParams]);
+
   // Calculate total premium
   const calculateTotalPremium = () => {
     const selectedPlanData = planVariants.find(p => p.id === formData.selectedPlan);
@@ -671,8 +689,20 @@ export default function LifeInsurance() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <h1 className="text-5xl mb-3">AI-Powered Life Insurance</h1>
-            <p className="text-xl text-blue-100">Upload documents, AI fills everything — you just review and proceed</p>
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex-1">
+                <h1 className="text-5xl mb-3">AI-Powered Life Insurance</h1>
+                <p className="text-xl text-blue-100">Upload documents, AI fills everything — you just review and proceed</p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => navigate('/life-insurance')}
+                className="ml-4 border-white/20 text-white hover:bg-white/10 hover:text-white"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Brochure
+              </Button>
+            </div>
           </motion.div>
         </div>
       </div>
