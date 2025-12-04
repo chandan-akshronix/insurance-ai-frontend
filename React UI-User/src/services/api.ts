@@ -310,13 +310,18 @@ export async function uploadDocument(
   documentType: string,
   userId?: number | string,
   policyId?: number | string,
+  claimId?: number | string,
   onProgress?: (percent: number) => void
 ) {
+  // Log documentType before sending to backend
+  console.log('[DOCUMENT_UPLOAD] Frontend - Sending documentType:', documentType, 'for file:', file.name, 'userId:', userId);
+  
   const formData = new FormData();
   formData.append('file', file);
   formData.append('documentType', documentType);
   formData.append('userId', String(userId || localStorage.getItem('userId') || '1'));
   if (policyId) formData.append('policyId', String(policyId));
+  if (claimId) formData.append('claimId', String(claimId));
 
   const baseUrl = 'http://localhost:8000';
 

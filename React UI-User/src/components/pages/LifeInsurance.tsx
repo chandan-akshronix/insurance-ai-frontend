@@ -215,7 +215,7 @@ export default function LifeInsurance() {
     if (!files) return;
     const fileArray = Array.from(files).map(f => ({
       file: f,
-      type: 'kyc_document',
+      type: 'other', // Default to 'other' instead of 'kyc_document' - user should select appropriate type
       progress: 0,
       uploading: false,
       error: null,
@@ -223,7 +223,7 @@ export default function LifeInsurance() {
       documentId: null
     }));
     setUploadedFiles(prev => [...prev, ...fileArray]);
-    toast.success(`${fileArray.length} file(s) queued for upload`);
+    toast.success(`${fileArray.length} file(s) queued for upload. Please select document type for each file.`);
   }, []);
 
   // Upload a single file by index (used for retry or individual upload)
@@ -240,6 +240,7 @@ export default function LifeInsurance() {
     });
 
     try {
+      console.log(`[DOCUMENT_UPLOAD] uploadFileAtIndex - Uploading file at index ${index}:`, fileObj.file.name, 'with documentType:', fileObj.type);
       const res = await uploadDocument(fileObj.file, fileObj.type, userIdForUpload, undefined, (p) => {
         setUploadedFiles(prev => {
           const next = [...prev];
@@ -482,8 +483,9 @@ export default function LifeInsurance() {
       if (uploadedFiles.length > 0) {
         try {
           // upload files in parallel but track progress per-file
-          const uploadPromises = uploadedFiles.map((fileObj, idx) =>
-            uploadDocument(fileObj.file, fileObj.type, userIdForUpload, undefined, (p) => {
+          const uploadPromises = uploadedFiles.map((fileObj, idx) => {
+            console.log(`[DOCUMENT_UPLOAD] LifeInsurance - Uploading file ${idx + 1}/${uploadedFiles.length}:`, fileObj.file.name, 'with documentType:', fileObj.type);
+            return uploadDocument(fileObj.file, fileObj.type, userIdForUpload, undefined, (p) => {
               setUploadedFiles(prev => {
                 const next = [...prev];
                 next[idx] = { ...next[idx], progress: p };
@@ -496,7 +498,8 @@ export default function LifeInsurance() {
                 next[idx] = { ...next[idx], uploadedUrl: res.fileUrl || res.fileurl || null, documentId: res.documentId || res.document_id || null, progress: 100, uploading: false };
                 return next;
               });
-              return res;
+              // Return both response and documentType for use in uploadedDocs array
+              return { ...res, documentType: fileObj.type };
             }).catch((err) => {
               setUploadedFiles(prev => {
                 const next = [...prev];
@@ -504,13 +507,20 @@ export default function LifeInsurance() {
                 return next;
               });
               throw err;
-            })
-          );
+            });
+          });
 
           const uploadResults = await Promise.all(uploadPromises);
           for (const r of uploadResults) {
             if (r && (r.fileUrl || r.fileurl)) {
-              uploadedDocs.push({ filename: r.fileName || r.file || null, url: r.fileUrl || r.fileurl, documentId: r.documentId || r.document_id || null, docType: 'kyc' });
+              // Use actual documentType from upload instead of hardcoded 'kyc'
+              const docType = r.documentType || 'other'; // Fallback to 'other' if not available
+              uploadedDocs.push({ 
+                filename: r.fileName || r.file || null, 
+                url: r.fileUrl || r.fileurl, 
+                documentId: r.documentId || r.document_id || null, 
+                docType: docType 
+              });
             }
           }
         } catch (e) {

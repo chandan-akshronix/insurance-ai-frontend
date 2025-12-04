@@ -47,12 +47,19 @@ class AzureStorageService:
     
     def upload_file(self, file_content: bytes, file_name: str, folder: Optional[str] = None) -> str:
         """
-        Upload a file to Azure Blob Storage
+        Upload a file to Azure Blob Storage with support for nested folder paths.
+        
+        Azure Blob Storage supports nested folder structures by using '/' in blob names.
+        Examples of valid folder paths:
+        - 'users/123/kyc' -> creates nested structure users/123/kyc/
+        - 'claims/456' -> creates nested structure claims/456/
+        - 'users/123/id_cards' -> creates nested structure users/123/id_cards/
         
         Args:
             file_content: File content as bytes
             file_name: Original file name
-            folder: Optional folder path (e.g., 'policies', 'claims', 'documents')
+            folder: Optional folder path supporting nested directories
+                   (e.g., 'users/123/kyc', 'claims/456', 'users/123/policies')
         
         Returns:
             Blob URL of the uploaded file
@@ -64,8 +71,11 @@ class AzureStorageService:
             file_extension = os.path.splitext(file_name)[1]
             unique_file_name = f"{uuid.uuid4()}{file_extension}"
             
-            # Construct blob path
+            # Construct blob path with nested folder support
+            # Azure Blob Storage automatically creates virtual folders when using '/' in blob names
             if folder:
+                # Normalize folder path (remove leading/trailing slashes)
+                folder = folder.strip('/')
                 blob_name = f"{folder}/{unique_file_name}"
             else:
                 blob_name = unique_file_name
@@ -120,10 +130,12 @@ class AzureStorageService:
     
     def delete_file(self, blob_name: str) -> bool:
         """
-        Delete a file from Azure Blob Storage
+        Delete a file from Azure Blob Storage.
+        Supports nested folder paths in blob_name.
         
         Args:
-            blob_name: Name of the blob to delete
+            blob_name: Full blob path including folder structure
+                     (e.g., 'users/123/kyc/uuid.pdf', 'claims/456/uuid.pdf')
         
         Returns:
             True if deleted successfully, False otherwise
@@ -131,6 +143,9 @@ class AzureStorageService:
         if not self.blob_service_client:
             raise ValueError("Azure Storage is not configured. Please set AZURE_STORAGE_CONNECTION_STRING environment variable.")
         try:
+            # Normalize blob name (remove leading slash if present)
+            blob_name = blob_name.lstrip('/')
+            
             blob_client = self.blob_service_client.get_blob_client(
                 container=self.container_name,
                 blob=blob_name
@@ -167,21 +182,29 @@ class AzureStorageService:
     
     def list_files(self, folder: Optional[str] = None, prefix: Optional[str] = None) -> list:
         """
-        List files in Azure Blob Storage
+        List files in Azure Blob Storage with support for nested folder paths.
         
         Args:
-            folder: Optional folder path
-            prefix: Optional prefix to filter files
+            folder: Optional folder path supporting nested directories
+                   (e.g., 'users/123/kyc', 'claims/456')
+            prefix: Optional prefix to filter files within the folder
         
         Returns:
-            List of blob names
+            List of blob names (full paths including folder structure)
+        
+        Example:
+            list_files(folder='users/123/kyc') -> ['users/123/kyc/uuid1.pdf', 'users/123/kyc/uuid2.pdf']
         """
         if not self.blob_service_client:
             return []
         try:
             container_client = self.blob_service_client.get_container_client(self.container_name)
             
-            # Construct prefix
+            # Normalize folder path
+            if folder:
+                folder = folder.strip('/')
+            
+            # Construct prefix for nested folder structure
             if folder and prefix:
                 search_prefix = f"{folder}/{prefix}"
             elif folder:
@@ -191,7 +214,7 @@ class AzureStorageService:
             else:
                 search_prefix = None
             
-            # List blobs
+            # List blobs with prefix (supports nested folders)
             blobs = container_client.list_blobs(name_starts_with=search_prefix)
             return [blob.name for blob in blobs]
         

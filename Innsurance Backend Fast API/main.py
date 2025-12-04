@@ -1,6 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from database import engine, Base
 from routers import users, policy, claims, products, contact, quotation, documents, nominee, activities, notifications, payments, auth, public, life_insurance
 from models import *
@@ -25,6 +27,19 @@ if raw_db:
         logger.info('Using DATABASE_URL (masked)')
 
 app = FastAPI(title="Insurance Management Backend")
+
+# Add validation error handler for better error messages
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle validation errors and return detailed error messages"""
+    logger.error(f"Validation error on {request.url.path}: {exc.errors()}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "detail": exc.errors(),
+            "body": str(exc.body) if hasattr(exc, 'body') else None
+        }
+    )
 
 # CORS Configuration
 cors_origins = os.getenv(
