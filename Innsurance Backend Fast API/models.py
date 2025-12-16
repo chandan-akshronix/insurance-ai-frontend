@@ -227,3 +227,21 @@ class Payments(Base):
     returnUrl = Column(String)
     paymentUrl = Column(String)
     user = relationship("User", back_populates="payments")
+
+
+class ApplicationProcess(Base):
+    __tablename__ = "application_process"
+
+    id = Column(Integer, primary_key=True, index=True)
+    applicationId = Column(String, unique=True, index=True)
+    status = Column(String)
+    currentStep = Column(String)
+    agentData = Column(JSON, nullable=True)
+    stepHistory = Column(JSON, nullable=True)
+    reviewReason = Column(String, nullable=True)
+    assignedTo = Column(String, nullable=True)
+    customerId = Column(Integer, ForeignKey("users.id"), nullable=True)
+    startTime = Column(Date)
+    lastUpdated = Column(Date)
+
+    user = relationship("User")

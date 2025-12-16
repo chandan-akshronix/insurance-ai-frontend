@@ -9,6 +9,10 @@ from mongo import get_collection
 # local DB access to create SQL Policy when requested
 from database import SessionLocal
 import crud, models
+import requests
+import os
+
+AGENT_SERVER_URL = os.getenv("AGENT_SERVER_URL", "http://localhost:8001")
 
 router = APIRouter(prefix="/life-insurance", tags=["life_insurance"])
 
@@ -84,6 +88,47 @@ async def create_application(request: Request, payload: dict):
     doc_id = str(ObjectId())
     doc['_id'] = doc_id
     await coll.insert_one(doc)
+
+    # -------------------------------------------------------------
+    # NEW: Trigger Agent Workflow & Create ApplicationProcess Entry
+    # -------------------------------------------------------------
+    try:
+        sql_db = SessionLocal()
+        try:
+            # Create the tracking entry for the Admin Panel
+            process_data = {
+                "applicationId": doc_id,
+                "status": "Submitted", # Initial status
+                "currentStep": "ingest",
+                "startTime": datetime.utcnow().date(),
+                "lastUpdated": datetime.utcnow().date(),
+                "customerId": doc.get('user_id') or doc.get('userId'), # Ensure this maps to a valid User ID if possible
+                "agentData": {},
+                "stepHistory": []
+            }
+            crud.create_entry(sql_db, models.ApplicationProcess, process_data)
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to create ApplicationProcess entry: {e}")
+        finally:
+            sql_db.close()
+
+        # Trigger the Agent
+        try:
+             # Fire and forget (or short timeout) to avoid blocking response
+            requests.post(
+                f"{AGENT_SERVER_URL}/underwrite", 
+                json={"application_id": doc_id}, 
+                timeout=2
+            )
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to trigger Agent Server: {e}")
+            
+    except Exception as e:
+         import logging
+         logging.error(f"Agent trigger block failed: {e}")
+
     return {'id': doc_id}
 
 

@@ -3,71 +3,73 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Eye, CheckCircle, XCircle, RotateCcw } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ApplicationProcess } from '../types';
+
+interface ReviewItem {
+  claimId: string;
+  reason: string;
+  assignedTo: string;
+  waitingTime: string;
+  priority: string;
+  amount: number;
+}
+
+const API_BASE_URL = 'http://127.0.0.1:8000';
 
 interface HumanReviewQueueProps {
   onViewClaim: (claimId: string) => void;
 }
 
-const reviewQueue = [
-  {
-    claimId: 'CLM-1042',
-    reason: 'High fraud score detected (81%)',
-    assignedTo: 'Sarah Johnson',
-    waitingTime: '2h 15m',
-    priority: 'high',
-    amount: 52000,
-  },
-  {
-    claimId: 'CLM-1039',
-    reason: 'Unusual claim frequency pattern',
-    assignedTo: 'Unassigned',
-    waitingTime: '4h 32m',
-    priority: 'medium',
-    amount: 67800,
-  },
-  {
-    claimId: 'CLM-1025',
-    reason: 'Document verification failed',
-    assignedTo: 'Michael Chen',
-    waitingTime: '1h 05m',
-    priority: 'high',
-    amount: 45600,
-  },
-  {
-    claimId: 'CLM-1019',
-    reason: 'Missing police report',
-    assignedTo: 'Priya Sharma',
-    waitingTime: '6h 18m',
-    priority: 'low',
-    amount: 28900,
-  },
-  {
-    claimId: 'CLM-1008',
-    reason: 'Duplicate invoice hash match',
-    assignedTo: 'Sarah Johnson',
-    waitingTime: '12h 45m',
-    priority: 'high',
-    amount: 73200,
-  },
-  {
-    claimId: 'CLM-0995',
-    reason: 'Ambiguous damage assessment',
-    assignedTo: 'Unassigned',
-    waitingTime: '3h 22m',
-    priority: 'medium',
-    amount: 34100,
-  },
-  {
-    claimId: 'CLM-0987',
-    reason: 'Policy coverage clarification needed',
-    assignedTo: 'Michael Chen',
-    waitingTime: '8h 10m',
-    priority: 'low',
-    amount: 19500,
-  },
-];
+
 
 export function HumanReviewQueue({ onViewClaim }: HumanReviewQueueProps) {
+  const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchQueue = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/agent/applications`);
+        if (!response.ok) throw new Error('Failed to fetch applications');
+        const data: ApplicationProcess[] = await response.json();
+
+        // Filter for items needing review
+        const reviewableStatuses = ['escalate_to_senior', 'manual_review', 'pending_review', 'ask_for_document'];
+        const filtered = data.filter(app => reviewableStatuses.includes(app.status));
+
+        const mappedData = filtered.map(app => ({
+          claimId: app.applicationId,
+          reason: app.reviewReason || app.status.replace(/_/g, ' '),
+          assignedTo: app.assignedTo || 'Unassigned',
+          waitingTime: getTimeDifference(app.lastUpdated),
+          priority: 'high', // Could derive from agentData.risk_score
+          amount: parseFloat(String(app.agentData?.ingest_llm?.normalized_application?.coverage_selection?.coverageAmount || 0)),
+        }));
+
+        setReviewQueue(mappedData);
+      } catch (error) {
+        console.error("Error fetching review queue:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchQueue();
+    const interval = setInterval(fetchQueue, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const getTimeDifference = (dateString: string) => {
+    if (!dateString) return 'Just now';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diff = Math.floor((now.getTime() - date.getTime()) / (1000 * 60)); // minutes
+    if (diff < 60) return `${diff}m`;
+    const hours = Math.floor(diff / 60);
+    return `${hours}h ${diff % 60}m`;
+  };
+
   const getPriorityBadge = (priority: string) => {
     const variants: Record<string, string> = {
       high: 'bg-red-100 text-red-700',
@@ -157,8 +159,8 @@ export function HumanReviewQueue({ onViewClaim }: HumanReviewQueueProps) {
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
                         onClick={() => onViewClaim(item.claimId)}
                       >

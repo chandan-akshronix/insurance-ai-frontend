@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from database import engine, Base
-from routers import users, policy, claims, products, contact, quotation, documents, nominee, activities, notifications, payments, auth, public, life_insurance
+from routers import users, policy, claims, products, contact, quotation, documents, nominee, activities, notifications, payments, auth, public, life_insurance, agent_integration
 from models import *
 import os
 from dotenv import load_dotenv
@@ -73,6 +73,7 @@ app.include_router(activities.router)
 app.include_router(notifications.router)
 app.include_router(payments.router)
 app.include_router(life_insurance.router)
+app.include_router(agent_integration.router)
 
 # Mount local uploads folder for development fallback when Azure is not configured
 uploads_dir = os.path.join(os.getcwd(), 'uploads')

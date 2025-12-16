@@ -178,7 +178,21 @@ def get_nominees_by_policy(db: Session, policy_id: int):
     return db.query(models.Nominee).filter(models.Nominee.policyId == policy_id).all()
 
 
+
 # Product-specific queries
 def get_products_by_category(db: Session, category: str):
     return db.query(models.Product).filter(models.Product.category == category).all()
+
+
+# Application Process queries (Agent Integration)
+def get_application_process(db: Session, application_id: str):
+    return db.query(models.ApplicationProcess).filter(models.ApplicationProcess.applicationId == application_id).first()
+
+
+def list_application_processes(db: Session, status: Optional[str] = None):
+    query = db.query(models.ApplicationProcess)
+    if status:
+        query = query.filter(models.ApplicationProcess.status == status)
+    return query.all()
+
 

@@ -1,12 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { 
-  FileText, 
-  Send, 
-  XCircle, 
-  FileQuestion, 
-  ArrowUpCircle, 
-  RefreshCw, 
+import {
+  FileText,
+  Send,
+  XCircle,
+  FileQuestion,
+  ArrowUpCircle,
+  RefreshCw,
   RotateCcw,
   Search,
   CheckCircle
@@ -21,288 +21,42 @@ import {
 } from './ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Input } from './ui/input';
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { ApplicationProcess } from '../types';
+
+const API_BASE_URL = 'http://127.0.0.1:8000';
 
 interface AIProcessFlowProps {
   onSelectClaim?: (claimId: string) => void;
 }
 
+interface ActiveApplication {
+  id: string;
+  customer: string;
+  type: string;
+  amount: number;
+  status: string;
+  assignedTo: string;
+  time: string;
+}
+
 // Active Applications Table Data
-const activeApplicationsData = [
-  // New Application
-  {
-    id: 'APP-3045',
-    customer: 'Arjun Kapoor',
-    amount: 500000,
-    type: 'Health Insurance',
-    status: 'new_application',
-    assignedTo: 'Intake Agent',
-    time: '5 mins ago'
-  },
-  {
-    id: 'APP-3038',
-    customer: 'Meera Reddy',
-    amount: 1200000,
-    type: 'Life Insurance',
-    status: 'new_application',
-    assignedTo: 'Intake Agent',
-    time: '1 hour ago'
-  },
-  {
-    id: 'APP-3032',
-    customer: 'Aditya Verma',
-    amount: 300000,
-    type: 'Auto Insurance',
-    status: 'new_application',
-    assignedTo: 'Intake Agent',
-    time: '2 hours ago'
-  },
-  {
-    id: 'APP-3028',
-    customer: 'Pooja Nair',
-    amount: 800000,
-    type: 'Health Insurance',
-    status: 'new_application',
-    assignedTo: 'Intake Agent',
-    time: '3 hours ago'
-  },
-  
-  // Sent for Approval
-  {
-    id: 'APP-3044',
-    customer: 'Neha Gupta',
-    amount: 650000,
-    type: 'Auto Insurance',
-    status: 'sent_for_approval',
-    assignedTo: 'Senior Underwriter',
-    time: '12 mins ago'
-  },
-  {
-    id: 'APP-3037',
-    customer: 'Sanjay Iyer',
-    amount: 2500000,
-    type: 'Property Insurance',
-    status: 'sent_for_approval',
-    assignedTo: 'Senior Manager',
-    time: '30 mins ago'
-  },
-  {
-    id: 'APP-3031',
-    customer: 'Riya Chatterjee',
-    amount: 950000,
-    type: 'Health Insurance',
-    status: 'sent_for_approval',
-    assignedTo: 'Approval Team',
-    time: '2 hours ago'
-  },
-  
-  // Rejected
-  {
-    id: 'APP-3043',
-    customer: 'Karthik Menon',
-    amount: 450000,
-    type: 'Life Insurance',
-    status: 'rejected',
-    assignedTo: 'Decision Agent',
-    time: '18 mins ago'
-  },
-  {
-    id: 'APP-3036',
-    customer: 'Pradeep Kumar',
-    amount: 320000,
-    type: 'Auto Insurance',
-    status: 'rejected',
-    assignedTo: 'Senior Underwriter',
-    time: '1 hour ago'
-  },
-  {
-    id: 'APP-3029',
-    customer: 'Lakshmi Patel',
-    amount: 550000,
-    type: 'Health Insurance',
-    status: 'rejected',
-    assignedTo: 'Medical Agent',
-    time: '4 hours ago'
-  },
-  
-  // Ask for Document
-  {
-    id: 'APP-3042',
-    customer: 'Simran Kaur',
-    amount: 720000,
-    type: 'Health Insurance',
-    status: 'ask_for_document',
-    assignedTo: 'Verification Agent',
-    time: '25 mins ago'
-  },
-  {
-    id: 'APP-3035',
-    customer: 'Manish Jain',
-    amount: 1500000,
-    type: 'Life Insurance',
-    status: 'ask_for_document',
-    assignedTo: 'Document Validator',
-    time: '1 hour ago'
-  },
-  {
-    id: 'APP-3030',
-    customer: 'Divya Rao',
-    amount: 980000,
-    type: 'Property Insurance',
-    status: 'ask_for_document',
-    assignedTo: 'Verification Agent',
-    time: '3 hours ago'
-  },
-  {
-    id: 'APP-3026',
-    customer: 'Harish Shetty',
-    amount: 430000,
-    type: 'Auto Insurance',
-    status: 'ask_for_document',
-    assignedTo: 'Verification Agent',
-    time: '5 hours ago'
-  },
-  
-  // Escalate to Senior
-  {
-    id: 'APP-3041',
-    customer: 'Rohit Sharma',
-    amount: 3200000,
-    type: 'Property Insurance',
-    status: 'escalate_to_senior',
-    assignedTo: 'Senior Underwriter',
-    time: '32 mins ago'
-  },
-  {
-    id: 'APP-3034',
-    customer: 'Tanvi Desai',
-    amount: 1800000,
-    type: 'Health Insurance',
-    status: 'escalate_to_senior',
-    assignedTo: 'Senior Manager',
-    time: '1 hour ago'
-  },
-  {
-    id: 'APP-3027',
-    customer: 'Vishal Mehta',
-    amount: 2100000,
-    type: 'Life Insurance',
-    status: 'escalate_to_senior',
-    assignedTo: 'Chief Underwriter',
-    time: '4 hours ago'
-  },
-  
-  // Updated Application
-  {
-    id: 'APP-3040',
-    customer: 'Anjali Deshmukh',
-    amount: 680000,
-    type: 'Auto Insurance',
-    status: 'updated_application',
-    assignedTo: 'Intake Agent',
-    time: '45 mins ago'
-  },
-  {
-    id: 'APP-3033',
-    customer: 'Suresh Bhat',
-    amount: 890000,
-    type: 'Health Insurance',
-    status: 'updated_application',
-    assignedTo: 'Medical Agent',
-    time: '2 hours ago'
-  },
-  {
-    id: 'APP-3025',
-    customer: 'Kavya Krishnan',
-    amount: 1350000,
-    type: 'Property Insurance',
-    status: 'updated_application',
-    assignedTo: 'Financial Agent',
-    time: '6 hours ago'
-  },
-  
-  // Approved Applications
-  {
-    id: 'APP-3022',
-    customer: 'Deepak Shah',
-    amount: 750000,
-    type: 'Health Insurance',
-    status: 'approved',
-    assignedTo: 'Approval Team',
-    time: '2 hours ago'
-  },
-  {
-    id: 'APP-3021',
-    customer: 'Ananya Reddy',
-    amount: 1100000,
-    type: 'Life Insurance',
-    status: 'approved',
-    assignedTo: 'Senior Underwriter',
-    time: '3 hours ago'
-  },
-  {
-    id: 'APP-3020',
-    customer: 'Rahul Bhatt',
-    amount: 420000,
-    type: 'Auto Insurance',
-    status: 'approved',
-    assignedTo: 'Approval Team',
-    time: '5 hours ago'
-  },
-  {
-    id: 'APP-3019',
-    customer: 'Priyanka Joshi',
-    amount: 2200000,
-    type: 'Property Insurance',
-    status: 'approved',
-    assignedTo: 'Chief Underwriter',
-    time: '8 hours ago'
-  },
-  
-  // Reapplication
-  {
-    id: 'APP-3039',
-    customer: 'Vikrant Singh',
-    amount: 750000,
-    type: 'Health Insurance',
-    status: 'reapplication',
-    assignedTo: 'Medical Agent',
-    time: '1 hour ago'
-  },
-  {
-    id: 'APP-3024',
-    customer: 'Shalini Tripathi',
-    amount: 1650000,
-    type: 'Life Insurance',
-    status: 'reapplication',
-    assignedTo: 'Intake Agent',
-    time: '3 hours ago'
-  },
-  {
-    id: 'APP-3023',
-    customer: 'Ramesh Choudhary',
-    amount: 540000,
-    type: 'Auto Insurance',
-    status: 'reapplication',
-    assignedTo: 'Financial Agent',
-    time: '7 hours ago'
-  },
-];
+// Active Applications Table Data removed (fetching from API)
 
 // Reusable Applications Table Component
-function ApplicationsTable({ 
-  applications, 
-  onSelectClaim, 
+function ApplicationsTable({
+  applications,
+  onSelectClaim,
   getStatusBadge,
   searchTerm
-}: { 
-  applications: typeof activeApplicationsData; 
+}: {
+  applications: ActiveApplication[];
   onSelectClaim?: (claimId: string) => void;
   getStatusBadge: (status: string) => React.ReactNode;
   searchTerm: string;
 }) {
   // Filter applications based on search term
-  const filteredApplications = applications.filter(app => {
+  const filteredApplications = applications.filter((app: ActiveApplication) => {
     const searchLower = searchTerm.toLowerCase();
     return (
       app.id.toLowerCase().includes(searchLower) ||
@@ -338,8 +92,8 @@ function ApplicationsTable({
           </TableHeader>
           <TableBody>
             {filteredApplications.map((app) => (
-              <TableRow 
-                key={app.id} 
+              <TableRow
+                key={app.id}
                 className="cursor-pointer hover:bg-blue-50/50 transition-colors"
                 onClick={() => onSelectClaim?.(app.id)}
               >
@@ -373,48 +127,101 @@ function ApplicationsTable({
 
 export function AIProcessFlow({ onSelectClaim }: AIProcessFlowProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeApplicationsData, setActiveApplicationsData] = useState<ActiveApplication[]>([]);
+
+  useEffect(() => {
+    const fetchApplications = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/agent/applications`);
+        if (!response.ok) throw new Error('Failed to fetch');
+        const data: ApplicationProcess[] = await response.json();
+        console.log("Fetched applications:", data); // DEBUG LOG
+
+        const mapped = data.map(app => ({
+          id: app.applicationId, // Use applicationId (string) for ID
+          customer: (app.agentData?.ingest_llm?.normalized_application?.personal_details?.fullName) || ('Customer ' + ((app.customerId || 0).toString())),
+          // ensure type is string
+          type: (app.agentData?.ingest_llm?.normalized_application?.coverage_selection?.selectedPlan || 'Life Insurance').toString(),
+          // ensure amount is number
+          amount: parseFloat(String(app.agentData?.ingest_llm?.normalized_application?.coverage_selection?.coverageAmount || 0)),
+          status: app.status,
+          assignedTo: app.assignedTo || 'Unassigned',
+          time: app.lastUpdated ? new Date(app.lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'
+        }));
+
+        console.log("Mapped applications:", mapped); // DEBUG LOG
+        setActiveApplicationsData(mapped);
+      } catch (e) {
+        console.error("Error fetching apps:", e);
+      }
+    };
+
+    fetchApplications();
+    const interval = setInterval(fetchApplications, 5000); // Poll every 5s
+    return () => clearInterval(interval);
+  }, []);
 
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { label: string; icon: any; className: string }> = {
-      new_application: { 
-        label: 'New Application', 
-        icon: FileText, 
-        className: 'bg-blue-100 text-blue-700 border-blue-200' 
+      new_application: {
+        label: 'New Application',
+        icon: FileText,
+        className: 'bg-blue-100 text-blue-700 border-blue-200'
       },
-      sent_for_approval: { 
-        label: 'Sent for Approval', 
-        icon: Send, 
-        className: 'bg-purple-100 text-purple-700 border-purple-200' 
+      processing: {
+        label: 'Processing',
+        icon: RefreshCw,
+        className: 'bg-blue-100 text-blue-700 border-blue-200 animate-pulse'
       },
-      rejected: { 
-        label: 'Rejected', 
-        icon: XCircle, 
-        className: 'bg-red-100 text-red-700 border-red-200' 
+      Submitted: {
+        label: 'Submitted',
+        icon: FileText,
+        className: 'bg-gray-100 text-gray-700 border-gray-200'
       },
-      ask_for_document: { 
-        label: 'Ask for Document', 
-        icon: FileQuestion, 
-        className: 'bg-orange-100 text-orange-700 border-orange-200' 
+      pending_review: {
+        label: 'Pending Review',
+        icon: FileText,
+        className: 'bg-yellow-100 text-yellow-700 border-yellow-200'
       },
-      escalate_to_senior: { 
-        label: 'Escalate to Senior', 
-        icon: ArrowUpCircle, 
-        className: 'bg-amber-100 text-amber-700 border-amber-200' 
+      manual_review: {
+        label: 'Manual Review',
+        icon: FileText,
+        className: 'bg-yellow-100 text-yellow-700 border-yellow-200'
       },
-      updated_application: { 
-        label: 'Updated Application', 
-        icon: RefreshCw, 
-        className: 'bg-cyan-100 text-cyan-700 border-cyan-200' 
+      sent_for_approval: {
+        label: 'Sent for Approval',
+        icon: Send,
+        className: 'bg-purple-100 text-purple-700 border-purple-200'
       },
-      approved: { 
-        label: 'Approved', 
-        icon: CheckCircle, 
-        className: 'bg-green-100 text-green-700 border-green-200' 
+      rejected: {
+        label: 'Rejected',
+        icon: XCircle,
+        className: 'bg-red-100 text-red-700 border-red-200'
       },
-      reapplication: { 
-        label: 'Reapplication', 
-        icon: RotateCcw, 
-        className: 'bg-indigo-100 text-indigo-700 border-indigo-200' 
+      ask_for_document: {
+        label: 'Ask for Document',
+        icon: FileQuestion,
+        className: 'bg-orange-100 text-orange-700 border-orange-200'
+      },
+      escalate_to_senior: {
+        label: 'Escalate to Senior',
+        icon: ArrowUpCircle,
+        className: 'bg-amber-100 text-amber-700 border-amber-200'
+      },
+      updated_application: {
+        label: 'Updated Application',
+        icon: RefreshCw,
+        className: 'bg-cyan-100 text-cyan-700 border-cyan-200'
+      },
+      approved: {
+        label: 'Approved',
+        icon: CheckCircle,
+        className: 'bg-green-100 text-green-700 border-green-200'
+      },
+      reapplication: {
+        label: 'Reapplication',
+        icon: RotateCcw,
+        className: 'bg-indigo-100 text-indigo-700 border-indigo-200'
       },
     };
 
@@ -440,7 +247,7 @@ export function AIProcessFlow({ onSelectClaim }: AIProcessFlowProps) {
               type="text"
               placeholder="Search by application ID, customer name, type, or assignee..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
               className="pl-10 h-11 border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-lg"
             />
           </div>
@@ -451,7 +258,7 @@ export function AIProcessFlow({ onSelectClaim }: AIProcessFlowProps) {
               <TabsTrigger value="new_application" className="px-3 py-3 data-[state=active]:bg-blue-600 data-[state=active]:text-white rounded-lg border border-gray-200 data-[state=active]:border-blue-600 flex items-center justify-center gap-2">
                 <span>New Application</span>
                 <Badge className="bg-blue-500 text-white border-0 text-xs px-2 py-0.5">
-                  {activeApplicationsData.filter(a => a.status === 'new_application' || a.status === 'updated_application').length}
+                  {activeApplicationsData.filter(a => ['new_application', 'updated_application', 'pending_review', 'manual_review', 'new', 'processing', 'Submitted'].includes(a.status)).length}
                 </Badge>
               </TabsTrigger>
               <TabsTrigger value="ask_for_document" className="px-3 py-3 data-[state=active]:bg-orange-600 data-[state=active]:text-white rounded-lg border border-gray-200 data-[state=active]:border-orange-600 flex items-center justify-center gap-2">
@@ -480,50 +287,50 @@ export function AIProcessFlow({ onSelectClaim }: AIProcessFlowProps) {
               </TabsTrigger>
             </TabsList>
 
-              <TabsContent value="new_application" className="mt-0">
-                <ApplicationsTable 
-                  applications={activeApplicationsData.filter(a => a.status === 'new_application' || a.status === 'updated_application')} 
-                  onSelectClaim={onSelectClaim} 
-                  getStatusBadge={getStatusBadge}
-                  searchTerm={searchTerm}
-                />
-              </TabsContent>
+            <TabsContent value="new_application" className="mt-0">
+              <ApplicationsTable
+                applications={activeApplicationsData.filter(a => ['new_application', 'updated_application', 'pending_review', 'manual_review', 'new', 'processing', 'Submitted'].includes(a.status))}
+                onSelectClaim={onSelectClaim}
+                getStatusBadge={getStatusBadge}
+                searchTerm={searchTerm}
+              />
+            </TabsContent>
 
-              <TabsContent value="ask_for_document" className="mt-0">
-                <ApplicationsTable 
-                  applications={activeApplicationsData.filter(a => a.status === 'ask_for_document')} 
-                  onSelectClaim={onSelectClaim} 
-                  getStatusBadge={getStatusBadge}
-                  searchTerm={searchTerm}
-                />
-              </TabsContent>
+            <TabsContent value="ask_for_document" className="mt-0">
+              <ApplicationsTable
+                applications={activeApplicationsData.filter(a => a.status === 'ask_for_document')}
+                onSelectClaim={onSelectClaim}
+                getStatusBadge={getStatusBadge}
+                searchTerm={searchTerm}
+              />
+            </TabsContent>
 
-              <TabsContent value="escalate_to_senior" className="mt-0">
-                <ApplicationsTable 
-                  applications={activeApplicationsData.filter(a => a.status === 'escalate_to_senior')} 
-                  onSelectClaim={onSelectClaim} 
-                  getStatusBadge={getStatusBadge}
-                  searchTerm={searchTerm}
-                />
-              </TabsContent>
+            <TabsContent value="escalate_to_senior" className="mt-0">
+              <ApplicationsTable
+                applications={activeApplicationsData.filter(a => a.status === 'escalate_to_senior')}
+                onSelectClaim={onSelectClaim}
+                getStatusBadge={getStatusBadge}
+                searchTerm={searchTerm}
+              />
+            </TabsContent>
 
-              <TabsContent value="rejected" className="mt-0">
-                <ApplicationsTable 
-                  applications={activeApplicationsData.filter(a => a.status === 'rejected')} 
-                  onSelectClaim={onSelectClaim} 
-                  getStatusBadge={getStatusBadge}
-                  searchTerm={searchTerm}
-                />
-              </TabsContent>
+            <TabsContent value="rejected" className="mt-0">
+              <ApplicationsTable
+                applications={activeApplicationsData.filter(a => a.status === 'rejected')}
+                onSelectClaim={onSelectClaim}
+                getStatusBadge={getStatusBadge}
+                searchTerm={searchTerm}
+              />
+            </TabsContent>
 
-              <TabsContent value="approved" className="mt-0">
-                <ApplicationsTable 
-                  applications={activeApplicationsData.filter(a => a.status === 'approved')} 
-                  onSelectClaim={onSelectClaim} 
-                  getStatusBadge={getStatusBadge}
-                  searchTerm={searchTerm}
-                />
-              </TabsContent>
+            <TabsContent value="approved" className="mt-0">
+              <ApplicationsTable
+                applications={activeApplicationsData.filter(a => a.status === 'approved')}
+                onSelectClaim={onSelectClaim}
+                getStatusBadge={getStatusBadge}
+                searchTerm={searchTerm}
+              />
+            </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
