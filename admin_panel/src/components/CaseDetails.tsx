@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { ArrowLeft, CheckCircle, Clock, AlertTriangle, XCircle, FileText, Download, Activity, Brain, ArrowRight, Database, TrendingUp, ChevronDown, ChevronUp, User, Mail, Phone, Send } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Clock, AlertTriangle, XCircle, FileText, Download, Activity, Brain, ArrowRight, Database, TrendingUp, ChevronDown, ChevronUp, User, Mail, Phone, Send, Loader2, UserCheck } from 'lucide-react';
 import { Separator } from './ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
@@ -9,6 +9,7 @@ import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Checkbox } from './ui/checkbox';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
+import { Skeleton } from './ui/skeleton';
 import { toast } from 'sonner';
 import { useState, useEffect } from 'react';
 import { ApplicationProcess, AgentStep } from '../types';
@@ -66,17 +67,436 @@ const availableDocuments = [
   { id: 'lifestyle', label: 'Lifestyle Declaration', description: 'Smoking/drinking habits questionnaire' },
 ];
 
+/**
+ * Helper function to extract customer name from application data
+ * Follows the same extraction path as AIProcessFlow.tsx for consistency
+ */
+function extractCustomerName(appDetails: ApplicationProcess | null): string {
+  if (!appDetails) return 'Unknown Customer';
+  
+  // Try to extract from normalized application data (same path as list view)
+  const name = appDetails.agentData?.ingest_llm?.normalized_application?.personal_details?.fullName;
+  if (name && typeof name === 'string' && name.trim()) {
+    return name.trim();
+  }
+  
+  // Fallback: Try alternative paths
+  const altName = appDetails.agentData?.application?.personal_details?.fullName ||
+                  appDetails.agentData?.application?.personal_details?.full_name ||
+                  appDetails.agentData?.application?.personalDetails?.fullName;
+  if (altName && typeof altName === 'string' && altName.trim()) {
+    return altName.trim();
+  }
+  
+  // Final fallback: Use customerId if available
+  if (appDetails.customerId) {
+    return `Customer ${appDetails.customerId}`;
+  }
+  
+  return 'Unknown Customer';
+}
+
+/**
+ * Helper function to extract and format policy type from application data
+ * Follows the same extraction path as AIProcessFlow.tsx for consistency
+ */
+function extractPolicyType(appDetails: ApplicationProcess | null): string {
+  if (!appDetails) return 'Life Insurance';
+  
+  // Try to extract from normalized application data (same path as list view)
+  const plan = appDetails.agentData?.ingest_llm?.normalized_application?.coverage_selection?.selectedPlan;
+  if (plan && typeof plan === 'string' && plan.trim()) {
+    return formatPolicyTypeString(plan.trim());
+  }
+  
+  // Fallback: Try alternative paths
+  const altPlan = appDetails.agentData?.application?.coverage_selection?.selectedPlan ||
+                  appDetails.agentData?.application?.coverageSelection?.selectedPlan ||
+                  appDetails.agentData?.application?.policy_type ||
+                  appDetails.agentData?.application?.type;
+  if (altPlan && typeof altPlan === 'string' && altPlan.trim()) {
+    return formatPolicyTypeString(altPlan.trim());
+  }
+  
+  // Default fallback
+  return 'Life Insurance';
+}
+
+/**
+ * Helper function to format policy type string
+ * Converts formats like "smart", "life_insurance", "health_insurance" to readable format
+ */
+function formatPolicyTypeString(plan: string): string {
+  if (!plan) return 'Life Insurance';
+  
+  // Handle common formats
+  const lowerPlan = plan.toLowerCase();
+  
+  // Direct mappings for common values
+  const mappings: Record<string, string> = {
+    'smart': 'Smart Plan',
+    'life_insurance': 'Life Insurance',
+    'health_insurance': 'Health Insurance',
+    'car_insurance': 'Car Insurance',
+    'vehicle_insurance': 'Vehicle Insurance',
+    'life': 'Life Insurance',
+    'health': 'Health Insurance',
+    'car': 'Car Insurance',
+  };
+  
+  if (mappings[lowerPlan]) {
+    return mappings[lowerPlan];
+  }
+  
+  // Format snake_case or kebab-case to Title Case
+  if (plan.includes('_') || plan.includes('-')) {
+    return plan
+      .split(/[_-]/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  }
+  
+  // Capitalize first letter if it's a single word
+  return plan.charAt(0).toUpperCase() + plan.slice(1).toLowerCase();
+}
+
+/**
+ * Helper function to extract sum insured (coverage amount) from application data
+ * Follows the same extraction path as AIProcessFlow.tsx for consistency
+ */
+function extractSumInsured(appDetails: ApplicationProcess | null): number {
+  if (!appDetails) return 0;
+  
+  // Try to extract from normalized application data (same path as list view)
+  const amount = appDetails.agentData?.ingest_llm?.normalized_application?.coverage_selection?.coverageAmount;
+  if (amount !== null && amount !== undefined) {
+    const parsed = parseFloat(String(amount));
+    if (!isNaN(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+  
+  // Fallback: Try alternative paths
+  const altAmount = appDetails.agentData?.application?.coverage_selection?.coverageAmount ||
+                    appDetails.agentData?.application?.coverageSelection?.coverageAmount ||
+                    appDetails.agentData?.application?.sum_insured ||
+                    appDetails.agentData?.application?.sumInsured ||
+                    appDetails.agentData?.application?.amount;
+  if (altAmount !== null && altAmount !== undefined) {
+    const parsed = parseFloat(String(altAmount));
+    if (!isNaN(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+  
+  // Default fallback
+  return 0;
+}
+
+/**
+ * Helper function to format numbers as Indian currency (₹)
+ * Handles edge cases and uses proper Indian number formatting
+ */
+function formatIndianCurrency(amount: number): string {
+  if (amount === null || amount === undefined || isNaN(amount)) {
+    return '₹0';
+  }
+  
+  // Ensure amount is a number
+  const numAmount = typeof amount === 'number' ? amount : parseFloat(String(amount));
+  
+  if (isNaN(numAmount)) {
+    return '₹0';
+  }
+  
+  // Format with Indian locale (en-IN) for proper comma placement
+  // Indian numbering: 1,00,000 (lakhs) and 1,00,00,000 (crores)
+  const formatted = numAmount.toLocaleString('en-IN', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+  
+  return `₹${formatted}`;
+}
+
+/**
+ * Helper function to extract and calculate fraud risk from application data
+ * Uses KYC confidence score (0.0-1.0) and converts to risk percentage (0-100%)
+ * Higher confidence = Lower fraud risk
+ */
+function extractFraudRisk(appDetails: ApplicationProcess | null): { level: 'Low' | 'Medium' | 'High', percentage: number } {
+  if (!appDetails) {
+    return { level: 'Low', percentage: 0 };
+  }
+  
+  let riskPercentage = 0;
+  
+  // Primary: Extract from KYC confidence (0.0-1.0) and convert to risk percentage
+  // Risk = (1 - Confidence) * 100
+  const kycConfidence = appDetails.agentData?.kyc_reconciliation?.kyc_confidence;
+  if (kycConfidence !== null && kycConfidence !== undefined) {
+    const confidence = typeof kycConfidence === 'number' ? kycConfidence : parseFloat(String(kycConfidence));
+    if (!isNaN(confidence) && confidence >= 0 && confidence <= 1) {
+      riskPercentage = Math.round((1 - confidence) * 100);
+    }
+  }
+  
+  // Fallback: Try alternative paths for risk scores
+  if (riskPercentage === 0 || isNaN(riskPercentage)) {
+    // Try aggregated risk from decision node
+    const decisionRisk = appDetails.agentData?.decision?.aggregated_risk ||
+                        appDetails.agentData?.decision?.risk_score;
+    if (decisionRisk !== null && decisionRisk !== undefined) {
+      const risk = typeof decisionRisk === 'number' ? decisionRisk : parseFloat(String(decisionRisk));
+      if (!isNaN(risk) && risk >= 0 && risk <= 100) {
+        riskPercentage = Math.round(risk);
+      }
+    }
+  }
+  
+  // Fallback: Calculate from health and financial risk scores if available
+  if (riskPercentage === 0 || isNaN(riskPercentage)) {
+    const healthRisk = appDetails.agentData?.health_underwriting?.risk_score ||
+                      appDetails.agentData?.health?.risk_score;
+    const financialRisk = appDetails.agentData?.financial_eligibility?.risk_score ||
+                         appDetails.agentData?.financial?.risk_score;
+    
+    if (healthRisk !== null && healthRisk !== undefined || financialRisk !== null && financialRisk !== undefined) {
+      const hRisk = healthRisk ? (typeof healthRisk === 'number' ? healthRisk : parseFloat(String(healthRisk))) : 0;
+      const fRisk = financialRisk ? (typeof financialRisk === 'number' ? financialRisk : parseFloat(String(financialRisk))) : 0;
+      
+      if (!isNaN(hRisk) && !isNaN(fRisk)) {
+        // Average of health and financial risk as fallback
+        riskPercentage = Math.round((hRisk + fRisk) / 2);
+      }
+    }
+  }
+  
+  // Determine risk level based on percentage
+  let level: 'Low' | 'Medium' | 'High';
+  if (riskPercentage <= 30) {
+    level = 'Low';
+  } else if (riskPercentage <= 70) {
+    level = 'Medium';
+  } else {
+    level = 'High';
+  }
+  
+  return { level, percentage: riskPercentage };
+}
+
+/**
+ * Helper function to get badge styling for fraud risk level
+ */
+function getFraudRiskBadgeStyle(level: 'Low' | 'Medium' | 'High'): string {
+  switch (level) {
+    case 'Low':
+      return 'bg-green-100 text-green-700';
+    case 'Medium':
+      return 'bg-yellow-100 text-yellow-700';
+    case 'High':
+      return 'bg-red-100 text-red-700';
+    default:
+      return 'bg-gray-100 text-gray-700';
+  }
+}
+
+/**
+ * Helper function to extract application date from application data
+ * Tries multiple paths to find the application creation/start date
+ */
+function extractApplicationDate(appDetails: ApplicationProcess | null): Date | null {
+  if (!appDetails) return null;
+  
+  // Primary: Extract from startTime (ISO string or timestamp)
+  if (appDetails.startTime) {
+    const date = parseDate(appDetails.startTime);
+    if (date && !isNaN(date.getTime())) {
+      return date;
+    }
+  }
+  
+  // Fallback: Try alternative paths in agentData
+  const altDateStr = appDetails.agentData?.application?.created_at ||
+                     appDetails.agentData?.application?.createdAt ||
+                     appDetails.agentData?.application?.startTime ||
+                     appDetails.agentData?.ingest_llm?.normalized_application?.created_at;
+  
+  if (altDateStr) {
+    const date = parseDate(altDateStr);
+    if (date && !isNaN(date.getTime())) {
+      return date;
+    }
+  }
+  
+  // Final fallback: Use lastUpdated if startTime is not available
+  if (appDetails.lastUpdated) {
+    const date = parseDate(appDetails.lastUpdated);
+    if (date && !isNaN(date.getTime())) {
+      return date;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Helper function to parse various date formats
+ * Handles ISO strings, timestamps, and common date formats
+ */
+function parseDate(dateValue: string | number | Date): Date | null {
+  if (!dateValue) return null;
+  
+  // If already a Date object
+  if (dateValue instanceof Date) {
+    return isNaN(dateValue.getTime()) ? null : dateValue;
+  }
+  
+  // If it's a number (timestamp)
+  if (typeof dateValue === 'number') {
+    // Check if it's in seconds (10 digits) or milliseconds (13 digits)
+    const timestamp = dateValue.toString().length === 10 ? dateValue * 1000 : dateValue;
+    const date = new Date(timestamp);
+    return isNaN(date.getTime()) ? null : date;
+  }
+  
+  // If it's a string, try parsing
+  if (typeof dateValue === 'string') {
+    // Try ISO string first
+    const isoDate = new Date(dateValue);
+    if (!isNaN(isoDate.getTime())) {
+      return isoDate;
+    }
+    
+    // Try parsing as timestamp string
+    const timestamp = parseInt(dateValue, 10);
+    if (!isNaN(timestamp)) {
+      const ts = timestamp.toString().length === 10 ? timestamp * 1000 : timestamp;
+      const date = new Date(ts);
+      return isNaN(date.getTime()) ? null : date;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Helper function to format date as "MMM DD, YYYY" (e.g., "Oct 26, 2025")
+ * Handles timezone and provides consistent formatting
+ */
+function formatApplicationDate(date: Date | null): string {
+  if (!date) {
+    return 'N/A';
+  }
+  
+  try {
+    // Format as "MMM DD, YYYY" (e.g., "Oct 26, 2025")
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'N/A';
+  }
+}
+
+/**
+ * Helper function to check data availability for a specific step
+ * Used for debugging why steps are pending
+ */
+function getStepDataAvailability(stepName: string, appDetails: ApplicationProcess | null): { exists: boolean; path: string; data: any } {
+  if (!appDetails || !appDetails.agentData) {
+    return { exists: false, path: 'N/A', data: null };
+  }
+
+  const stepDataMap: Record<string, { path: string; key: string }> = {
+    'Customer Submission': { path: 'agentData.ingest_llm', key: 'ingest_llm' },
+    'Document Processing': { path: 'agentData.document_processing', key: 'document_processing' },
+    'KYC Verification': { path: 'agentData.kyc_reconciliation', key: 'kyc_reconciliation' },
+    'Health Assessment': { path: 'agentData.health_underwriting', key: 'health_underwriting' },
+    'Employment Verification': { path: 'agentData.occupation_risk', key: 'occupation_risk' },
+    'Financial Eligibility': { path: 'agentData.financial_eligibility', key: 'financial_eligibility' },
+    'Final Decision': { path: 'agentData.policy_decision', key: 'policy_decision' }
+  };
+
+  const stepInfo = stepDataMap[stepName];
+  if (!stepInfo) {
+    return { exists: false, path: 'Unknown step', data: null };
+  }
+
+  const data = appDetails.agentData[stepInfo.key];
+  return {
+    exists: !!data,
+    path: stepInfo.path,
+    data: data
+  };
+}
+
+/**
+ * Helper function to extract customer contact information (email and phone) from application data
+ */
+function extractCustomerContact(appDetails: ApplicationProcess | null): { email: string; phone: string } {
+  if (!appDetails) {
+    return { email: 'N/A', phone: 'N/A' };
+  }
+  
+  let email = '';
+  let phone = '';
+  
+  // Try to extract from normalized application data
+  const contactInfo = appDetails.agentData?.ingest_llm?.normalized_application?.contact_info ||
+                      appDetails.agentData?.ingest_llm?.normalized_application?.contactInfo ||
+                      appDetails.agentData?.application?.contact_info ||
+                      appDetails.agentData?.application?.contactInfo;
+  
+  if (contactInfo) {
+    email = contactInfo.email || contactInfo.Email || '';
+    phone = contactInfo.phone || contactInfo.Phone || contactInfo.phoneNumber || contactInfo.phone_number || '';
+  }
+  
+  // Fallback: Try alternative paths
+  if (!email) {
+    email = appDetails.agentData?.application?.personal_details?.email ||
+            appDetails.agentData?.application?.personal_details?.Email ||
+            appDetails.agentData?.application?.personalDetails?.email ||
+            appDetails.agentData?.ingest_llm?.normalized_application?.personal_details?.email || '';
+  }
+  
+  if (!phone) {
+    phone = appDetails.agentData?.application?.personal_details?.phone ||
+            appDetails.agentData?.application?.personal_details?.Phone ||
+            appDetails.agentData?.application?.personal_details?.phoneNumber ||
+            appDetails.agentData?.application?.personalDetails?.phone ||
+            appDetails.agentData?.ingest_llm?.normalized_application?.personal_details?.phone || '';
+  }
+  
+  return {
+    email: email && email.trim() ? email.trim() : 'N/A',
+    phone: phone && phone.trim() ? phone.trim() : 'N/A'
+  };
+}
+
 export function CaseDetails({ claimId, onBack }: CaseDetailsProps) {
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
   const [documents, setDocuments] = useState<any[]>([]);
   const [auditEntries, setAuditEntries] = useState<any[]>([]);
   const [appDetails, setAppDetails] = useState<ApplicationProcess | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [expandedStep, setExpandedStep] = useState<number | null>(6);
   const [expandAll, setExpandAll] = useState(false);
   const [showActionBar, setShowActionBar] = useState(true);
   const [showEscalateDialog, setShowEscalateDialog] = useState(false);
   const [showRequestDocsDialog, setShowRequestDocsDialog] = useState(false);
+  const [showManualCompleteDialog, setShowManualCompleteDialog] = useState(false);
+  const [selectedStepForCompletion, setSelectedStepForCompletion] = useState<AgentStep | null>(null);
+  const [manualCompletionNotes, setManualCompletionNotes] = useState('');
+  const [manualCompletionConfirmed, setManualCompletionConfirmed] = useState(false);
+  const [stepValidationWarning, setStepValidationWarning] = useState<string | null>(null);
+  const [showOverrideConfirmation, setShowOverrideConfirmation] = useState(false);
   const [selectedReviewer, setSelectedReviewer] = useState<string>('');
   const [escalationReason, setEscalationReason] = useState('');
   const [requestedDocs, setRequestedDocs] = useState<Set<string>>(new Set());
@@ -88,6 +508,8 @@ export function CaseDetails({ claimId, onBack }: CaseDetailsProps) {
 
   useEffect(() => {
     const fetchDetails = async () => {
+      setIsLoading(true);
+      setError(null);
       try {
         const response = await fetch(`${API_BASE_URL}/agent/application/${claimId}`);
         if (!response.ok) throw new Error('Failed to fetch application');
@@ -123,19 +545,91 @@ export function CaseDetails({ claimId, onBack }: CaseDetailsProps) {
           });
         }
 
+        // Debug: Log agentData structure to understand pending steps
+        console.group('🔍 Agent Data Debug - Application:', claimId);
+        console.log('Full agentData:', data.agentData);
+        console.log('Step History:', steps);
+        console.log('Agent Data Keys:', data.agentData ? Object.keys(data.agentData) : 'No agentData');
+        
+        // Check data availability for each expected step
+        const stepDataChecks: Record<string, any> = {
+          'Customer Submission': {
+            exists: !!data.agentData?.ingest_llm,
+            path: 'agentData.ingest_llm',
+            data: data.agentData?.ingest_llm
+          },
+          'Document Processing': {
+            exists: !!data.agentData?.document_processing,
+            path: 'agentData.document_processing',
+            data: data.agentData?.document_processing
+          },
+          'KYC Verification': {
+            exists: !!data.agentData?.kyc_reconciliation,
+            path: 'agentData.kyc_reconciliation',
+            data: data.agentData?.kyc_reconciliation
+          },
+          'Health Assessment': {
+            exists: !!data.agentData?.health_underwriting,
+            path: 'agentData.health_underwriting',
+            data: data.agentData?.health_underwriting
+          },
+          'Employment Verification': {
+            exists: !!(data.agentData?.occupation_risk || data.agentData?.occupation),
+            path: 'agentData.occupation_risk',
+            data: data.agentData?.occupation_risk || data.agentData?.occupation
+          },
+          'Financial Eligibility': {
+            exists: !!data.agentData?.financial_eligibility,
+            path: 'agentData.financial_eligibility',
+            data: data.agentData?.financial_eligibility
+          },
+          'Final Decision': {
+            exists: !!data.agentData?.policy_decision,
+            path: 'agentData.policy_decision',
+            data: data.agentData?.policy_decision
+          }
+        };
+        
+        console.log('Step Data Availability:', stepDataChecks);
+        console.groupEnd();
+
         // Mock documents for now, or extract from ingest_llm if available
         setDocuments([
           { id: 1, name: 'ID Proof (Aadhaar Card)', status: 'verified', mismatch: false },
           { id: 2, name: 'Income Certificate', status: 'verified', mismatch: false },
         ]);
 
-        // Mock audit for now
-        setAuditEntries([
-          { time: new Date().toLocaleTimeString(), agent: 'System', action: `Loaded application ${claimId}` }
-        ]);
+        // Load audit trail from application data
+        const auditTrail = data.auditTrail || [];
+        // Format audit entries for display
+        const formattedAuditEntries = auditTrail.map((entry: any) => ({
+          time: entry.timestamp ? new Date(entry.timestamp).toLocaleString() : 'N/A',
+          agent: entry.admin_name || entry.admin_id || 'Admin',
+          action: entry.message || `${entry.action}: ${entry.step_name || 'Unknown Step'}`,
+          details: entry.admin_notes || '',
+          stepName: entry.step_name,
+          previousStatus: entry.previous_status,
+          newStatus: entry.new_status
+        }));
+        
+        // Add system entry for loading application
+        formattedAuditEntries.unshift({
+          time: new Date().toLocaleString(),
+          agent: 'System',
+          action: `Loaded application ${claimId}`,
+          details: '',
+          stepName: null,
+          previousStatus: null,
+          newStatus: null
+        });
+        
+        setAuditEntries(formattedAuditEntries);
 
+        setIsLoading(false);
       } catch (error) {
         console.error("Error fetching case details:", error);
+        setError(error instanceof Error ? error.message : 'Failed to load application details');
+        setIsLoading(false);
       }
     };
 
@@ -344,15 +838,250 @@ export function CaseDetails({ claimId, onBack }: CaseDetailsProps) {
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  // Critical steps that cannot be skipped
+  const CRITICAL_STEPS = ['KYC Verification', 'Health Assessment'];
+  
+  // Step order for validation
+  const STEP_ORDER = [
+    'Customer Submission',
+    'Document Processing',
+    'KYC Verification',
+    'Health Assessment',
+    'Employment Verification',
+    'Financial Eligibility',
+    'Final Decision'
+  ];
+
+  // Step dependencies mapping
+  const STEP_DEPENDENCIES: Record<string, string[]> = {
+    'Customer Submission': ['Document Processing', 'KYC Verification'],
+    'Document Processing': ['KYC Verification'],
+    'KYC Verification': ['Health Assessment', 'Employment Verification', 'Financial Eligibility'],
+    'Health Assessment': ['Final Decision'],
+    'Employment Verification': ['Final Decision'],
+    'Financial Eligibility': ['Final Decision'],
+    'Final Decision': []
+  };
+
+  // Get steps that depend on a given step
+  const getDependentSteps = (stepName: string): string[] => {
+    return STEP_DEPENDENCIES[stepName] || [];
+  };
+
+  const validateStepCompletion = (step: AgentStep): { isValid: boolean; warning?: string; error?: string } => {
+    // Check if step is critical
+    if (CRITICAL_STEPS.includes(step.name)) {
+      return {
+        isValid: false,
+        error: `Cannot manually complete critical step "${step.name}". This step must be completed by the agent workflow.`
+      };
+    }
+
+    // Check if previous steps are completed
+    const stepIndex = STEP_ORDER.indexOf(step.name);
+    if (stepIndex === -1) {
+      // Step not in order list, allow with warning
+      return {
+        isValid: true,
+        warning: 'This step is not in the standard workflow order. Proceed with caution.'
+      };
+    }
+
+    // Check previous steps
+    const previousSteps = STEP_ORDER.slice(0, stepIndex);
+    const incompleteSteps: string[] = [];
+    
+    for (const prevStepName of previousSteps) {
+      const prevStep = agentSteps.find(s => s.name === prevStepName);
+      if (!prevStep || (prevStep.status !== 'completed' && prevStep.status !== 'in_progress' && prevStep.status !== 'in-progress')) {
+        incompleteSteps.push(prevStepName);
+      }
+    }
+
+    if (incompleteSteps.length > 0) {
+      return {
+        isValid: true,
+        warning: `The following steps are not yet completed: ${incompleteSteps.join(', ')}. Completing this step may skip required workflow steps.`
+      };
+    }
+
+    return { isValid: true };
+  };
+
+  const handleManualComplete = (step: AgentStep) => {
+    // Validate step before opening dialog
+    const validation = validateStepCompletion(step);
+    
+    if (!validation.isValid && validation.error) {
+      toast.error(validation.error);
+      return;
+    }
+
+    setSelectedStepForCompletion(step);
+    setManualCompletionNotes('');
+    setManualCompletionConfirmed(false);
+    setStepValidationWarning(validation.warning || null);
+    setShowOverrideConfirmation(false);
+    setShowManualCompleteDialog(true);
+  };
+
+  const handleSubmitManualCompletion = async () => {
+    if (!selectedStepForCompletion || !manualCompletionNotes.trim() || !manualCompletionConfirmed) {
+      toast.error('Please provide admin notes and confirm verification');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/agent/step/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          application_id: claimId,
+          step_id: selectedStepForCompletion.id,
+          step_name: selectedStepForCompletion.name,
+          admin_notes: manualCompletionNotes.trim()
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Failed to complete step' }));
+        throw new Error(errorData.detail || 'Failed to complete step');
+      }
+
+      const updatedProcess = await response.json();
+      setAppDetails(updatedProcess);
+      
+      // Update step history if available
+      if (updatedProcess.stepHistory) {
+        setAgentSteps(updatedProcess.stepHistory);
+      }
+
+      toast.success(`Step "${selectedStepForCompletion.name}" marked as complete`);
+      setShowManualCompleteDialog(false);
+      setSelectedStepForCompletion(null);
+      setManualCompletionNotes('');
+      setManualCompletionConfirmed(false);
+      setStepValidationWarning(null);
+      setShowOverrideConfirmation(false);
+    } catch (error: any) {
+      console.error('Error completing step manually:', error);
+      toast.error(error.message || 'Failed to complete step');
+    }
+  };
+
+  const getStatusBadge = (status: string, step?: AgentStep) => {
+    // Check if step was manually completed
+    const isManual = step && step.status === 'completed' && (step as any).completed_by === 'human';
+    
     const variants: Record<string, string> = {
-      completed: 'bg-green-100 text-green-700 border-0',
+      completed: isManual ? 'bg-orange-100 text-orange-700 border-0' : 'bg-green-100 text-green-700 border-0',
       in_progress: 'bg-blue-100 text-blue-700 border-0',
       warning: 'bg-orange-100 text-orange-700 border-0',
       pending: 'bg-gray-100 text-gray-700',
     };
     return variants[status] || 'bg-gray-100 text-gray-700';
   };
+
+  // Loading State
+  if (isLoading) {
+    return (
+      <div className="p-10 bg-gradient-to-br from-gray-50 to-white min-h-screen">
+        <div className="mb-8">
+          <Button variant="ghost" onClick={onBack} className="mb-6 hover:bg-white">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
+          
+          <div className="flex items-start justify-between">
+            <div>
+              <Skeleton className="h-10 w-64 mb-2" />
+              <Skeleton className="h-6 w-96" />
+            </div>
+            <Skeleton className="h-8 w-32" />
+          </div>
+        </div>
+        
+        {/* Loading Skeleton for Header Info Card */}
+        <Card className="mb-8 border-0 shadow-sm">
+          <CardContent className="p-8">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="text-center">
+                  <Skeleton className="h-4 w-20 mx-auto mb-2" />
+                  <Skeleton className="h-6 w-24 mx-auto" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+        
+        {/* Loading Skeleton for Main Content */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-20 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Error State
+  if (error) {
+    return (
+      <div className="p-10 bg-gradient-to-br from-gray-50 to-white min-h-screen">
+        <div className="mb-8">
+          <Button variant="ghost" onClick={onBack} className="mb-6 hover:bg-white">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
+        </div>
+        
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-8">
+            <div className="flex items-center gap-4">
+              <AlertTriangle className="w-8 h-8 text-red-600 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-red-900 mb-1">Failed to Load Application</h3>
+                <p className="text-red-700 mb-4">{error}</p>
+                <Button
+                  variant="outline"
+                  className="border-red-300 text-red-700 hover:bg-red-100"
+                  onClick={() => {
+                    setError(null);
+                    setIsLoading(true);
+                    // Trigger refetch
+                    const fetchDetails = async () => {
+                      try {
+                        const response = await fetch(`${API_BASE_URL}/agent/application/${claimId}`);
+                        if (!response.ok) throw new Error('Failed to fetch application');
+                        const data: ApplicationProcess = await response.json();
+                        setAppDetails(data);
+                        setIsLoading(false);
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : 'Failed to load application details');
+                        setIsLoading(false);
+                      }
+                    };
+                    fetchDetails();
+                  }}
+                >
+                  <Loader2 className="w-4 h-4 mr-2" />
+                  Retry
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-10 bg-gradient-to-br from-gray-50 to-white min-h-screen">
@@ -379,23 +1108,30 @@ export function CaseDetails({ claimId, onBack }: CaseDetailsProps) {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
             <div className="text-center">
               <p className="text-sm text-gray-500 mb-2">Customer</p>
-              <p className="text-lg">Rajesh Kumar</p>
+              <p className="text-lg">{extractCustomerName(appDetails)}</p>
             </div>
             <div className="text-center">
               <p className="text-sm text-gray-500 mb-2">Policy Type</p>
-              <p className="text-lg">Health Insurance</p>
+              <p className="text-lg">{extractPolicyType(appDetails)}</p>
             </div>
             <div className="text-center">
               <p className="text-sm text-gray-500 mb-2">Sum Insured</p>
-              <p className="text-lg">₹500,000</p>
+              <p className="text-lg">{formatIndianCurrency(extractSumInsured(appDetails))}</p>
             </div>
             <div className="text-center">
               <p className="text-sm text-gray-500 mb-2">Fraud Risk</p>
-              <Badge className="bg-green-100 text-green-700 border-0 text-base px-4 py-1">Low (12%)</Badge>
+              {(() => {
+                const fraudRisk = extractFraudRisk(appDetails);
+                return (
+                  <Badge className={`${getFraudRiskBadgeStyle(fraudRisk.level)} border-0 text-base px-4 py-1`}>
+                    {fraudRisk.level} ({fraudRisk.percentage}%)
+                  </Badge>
+                );
+              })()}
             </div>
             <div className="text-center">
               <p className="text-sm text-gray-500 mb-2">Application Date</p>
-              <p className="text-lg">Oct 26, 2025</p>
+              <p className="text-lg">{formatApplicationDate(extractApplicationDate(appDetails))}</p>
             </div>
           </div>
 
@@ -436,6 +1172,25 @@ export function CaseDetails({ claimId, onBack }: CaseDetailsProps) {
         </TabsList>
 
         <TabsContent value="timeline" className="space-y-4">
+          {/* Pending Steps Summary Banner */}
+          {agentSteps.filter(s => s.status === 'pending').length > 0 && (
+            <Card className="border-yellow-300 bg-yellow-50">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <Clock className="w-5 h-5 text-yellow-600 animate-pulse" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-yellow-900">
+                      {agentSteps.filter(s => s.status === 'pending').length} step{agentSteps.filter(s => s.status === 'pending').length > 1 ? 's' : ''} waiting for agent
+                    </p>
+                    <p className="text-xs text-yellow-700 mt-1">
+                      The AI agent workflow is processing these steps. You can manually complete them if needed.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="border-0 shadow-sm">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -484,7 +1239,7 @@ export function CaseDetails({ claimId, onBack }: CaseDetailsProps) {
                           className={`flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200 w-full ${isExpanded
                             ? `${getStatusColor(step.status)} shadow-lg scale-105`
                             : `border-gray-200 bg-white hover:shadow-md`
-                            }`}
+                            } ${step.status === 'pending' ? 'animate-pulse border-yellow-300' : ''}`}
                         >
                           <div className={`w-14 h-14 rounded-full flex items-center justify-center ${isExpanded ? 'ring-4 ring-white' : ''
                             } ${getStatusColor(step.status)}`}>
@@ -494,8 +1249,9 @@ export function CaseDetails({ claimId, onBack }: CaseDetailsProps) {
                             <p className={`text-xs mb-1 ${isExpanded ? '' : 'text-gray-900'}`}>
                               {step.name}
                             </p>
-                            <Badge className={`text-xs ${getStatusBadge(step.status)} border-0`}>
+                            <Badge className={`text-xs ${getStatusBadge(step.status, step)} border-0`}>
                               {step.status === 'in_progress' || step.status === 'in-progress' ? 'In Progress' :
+                                step.status === 'completed' && (step as any).completed_by === 'human' ? 'Completed (Manual)' :
                                 step.status === 'completed' ? 'Completed' :
                                   'Pending'}
                             </Badge>
@@ -524,8 +1280,10 @@ export function CaseDetails({ claimId, onBack }: CaseDetailsProps) {
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
                             <p className="text-xl">{step.name}</p>
-                            <Badge className={`${getStatusBadge(step.status)} px-3 py-1`}>
-                              {step.status === 'in_progress' || step.status === 'in-progress' ? 'In Progress' : step.status.replace('_', ' ')}
+                            <Badge className={`${getStatusBadge(step.status, step)} px-3 py-1`}>
+                              {step.status === 'in_progress' || step.status === 'in-progress' ? 'In Progress' : 
+                               step.status === 'completed' && (step as any).completed_by === 'human' ? 'Completed (Manual)' :
+                               step.status === 'completed' ? 'Completed' : step.status.replace('_', ' ')}
                             </Badge>
                           </div>
                           <div className="flex items-center gap-4 text-sm text-gray-500 mb-2">
@@ -543,6 +1301,50 @@ export function CaseDetails({ claimId, onBack }: CaseDetailsProps) {
                             )}
                           </div>
                           <p className="text-sm text-gray-700">{step.summary}</p>
+                          
+                          {/* Debug Information for Pending Steps */}
+                          {step.status === 'pending' && (
+                            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                              <div className="flex items-start gap-2">
+                                <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                                <div className="flex-1">
+                                  <p className="text-xs font-semibold text-yellow-900 mb-1">Why is this step pending?</p>
+                                  {(() => {
+                                    const dataCheck = getStepDataAvailability(step.name, appDetails);
+                                    return (
+                                      <div className="text-xs text-yellow-800 space-y-1">
+                                        <p>
+                                          <span className="font-medium">Data Path:</span> <code className="bg-yellow-100 px-1 rounded">{dataCheck.path}</code>
+                                        </p>
+                                        <p>
+                                          <span className="font-medium">Data Available:</span>{' '}
+                                          <span className={dataCheck.exists ? 'text-green-700 font-semibold' : 'text-red-700 font-semibold'}>
+                                            {dataCheck.exists ? 'Yes ✓' : 'No ✗'}
+                                          </span>
+                                        </p>
+                                        {!dataCheck.exists && (
+                                          <p className="text-yellow-700 italic mt-1">
+                                            This step requires data at <code className="bg-yellow-100 px-1 rounded">{dataCheck.path}</code> to be marked as complete.
+                                            The agent workflow may not have reached this step yet, or the data structure may be different.
+                                          </p>
+                                        )}
+                                        {dataCheck.exists && (
+                                          <details className="mt-2">
+                                            <summary className="cursor-pointer text-yellow-700 hover:text-yellow-900 font-medium">
+                                              View Available Data
+                                            </summary>
+                                            <pre className="mt-2 p-2 bg-yellow-100 rounded text-xs overflow-auto max-h-40">
+                                              {JSON.stringify(dataCheck.data, null, 2)}
+                                            </pre>
+                                          </details>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         {/* Confidence Score */}
@@ -706,6 +1508,43 @@ export function CaseDetails({ claimId, onBack }: CaseDetailsProps) {
                             </div>
                           )}
                         </div>
+
+                        {/* Manual Completion Button for Pending Steps */}
+                        {step.status === 'pending' && (
+                          <div className="mt-4 pt-4 border-t border-gray-200">
+                            <Button
+                              onClick={() => handleManualComplete(step)}
+                              className="w-full bg-orange-600 hover:bg-orange-700 text-white"
+                              variant="default"
+                            >
+                              <UserCheck className="w-4 h-4 mr-2" />
+                              Mark as Complete (Human Review)
+                            </Button>
+                            <p className="text-xs text-gray-500 mt-2 text-center">
+                              Manually verify and complete this step if the agent workflow is stuck
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Visual Indicator for Manually Completed Steps */}
+                        {step.status === 'completed' && (step as any).completed_by === 'human' && (
+                          <div className="mt-4 pt-4 border-t border-orange-200">
+                            <div className="flex items-center gap-2 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                              <UserCheck className="w-4 h-4 text-orange-600" />
+                              <div className="flex-1">
+                                <p className="text-xs font-semibold text-orange-900">Completed Manually</p>
+                                {(step as any).admin_notes && (
+                                  <p className="text-xs text-orange-700 mt-1">{(step as any).admin_notes}</p>
+                                )}
+                                {(step as any).completed_at && (
+                                  <p className="text-xs text-orange-600 mt-1">
+                                    Completed at: {new Date((step as any).completed_at).toLocaleString()}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -761,16 +1600,40 @@ export function CaseDetails({ claimId, onBack }: CaseDetailsProps) {
             </CardHeader>
             <CardContent>
               <div className="space-y-1">
-                {auditEntries.map((entry: any, index: number) => (
-                  <div key={index}>
-                    <div className="flex gap-4 py-3">
-                      <span className="text-sm text-gray-500 w-20">{entry.time}</span>
-                      <span className="text-sm text-blue-600 w-32">{entry.agent}</span>
-                      <span className="text-sm flex-1">{entry.action}</span>
-                    </div>
-                    {index < auditEntries.length - 1 && <Separator />}
+                {auditEntries.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No audit entries yet.</p>
+                    <p className="text-sm mt-2">Manual step completions and actions will appear here.</p>
                   </div>
-                ))}
+                ) : (
+                  auditEntries.map((entry: any, index: number) => (
+                    <div key={index}>
+                      <div className="flex gap-4 py-3">
+                        <span className="text-sm text-gray-500 w-40 flex-shrink-0">{entry.time}</span>
+                        <span className="text-sm text-blue-600 w-32 flex-shrink-0 font-medium">{entry.agent}</span>
+                        <div className="flex-1">
+                          <span className="text-sm">{entry.action}</span>
+                          {entry.details && (
+                            <p className="text-xs text-gray-600 mt-1 italic">Notes: {entry.details}</p>
+                          )}
+                          {entry.stepName && (
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge className="text-xs bg-orange-100 text-orange-700 border-0">
+                                {entry.stepName}
+                              </Badge>
+                              {entry.previousStatus && entry.newStatus && (
+                                <span className="text-xs text-gray-500">
+                                  {entry.previousStatus} → {entry.newStatus}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {index < auditEntries.length - 1 && <Separator />}
+                    </div>
+                  ))
+                )}
               </div>
               <div className="mt-6 flex gap-3">
                 <Button variant="outline">
@@ -885,7 +1748,10 @@ export function CaseDetails({ claimId, onBack }: CaseDetailsProps) {
                 <span className="text-gray-600">Application ID:</span> <span>{claimId}</span>
               </p>
               <p className="text-sm">
-                <span className="text-gray-600">Customer:</span> <span>Rajesh Kumar - Health Insurance (₹500,000)</span>
+                <span className="text-gray-600">Customer:</span>{' '}
+                <span>
+                  {extractCustomerName(appDetails)} - {extractPolicyType(appDetails)} ({formatIndianCurrency(extractSumInsured(appDetails))})
+                </span>
               </p>
             </div>
 
@@ -987,10 +1853,16 @@ export function CaseDetails({ claimId, onBack }: CaseDetailsProps) {
             {/* Application Info */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-sm mb-1">
-                <span className="text-gray-600">Customer:</span> <span>Rajesh Kumar</span>
+                <span className="text-gray-600">Customer:</span> <span>{extractCustomerName(appDetails)}</span>
               </p>
               <p className="text-sm">
-                <span className="text-gray-600">Contact:</span> <span>rajesh.kumar@email.com | +91 98765 12345</span>
+                <span className="text-gray-600">Contact:</span>{' '}
+                <span>
+                  {(() => {
+                    const contact = extractCustomerContact(appDetails);
+                    return `${contact.email} | ${contact.phone}`;
+                  })()}
+                </span>
               </p>
             </div>
 
@@ -1046,6 +1918,137 @@ export function CaseDetails({ claimId, onBack }: CaseDetailsProps) {
             >
               <Send className="w-4 h-4 mr-2" />
               Send Request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Step Completion Dialog */}
+      <Dialog open={showManualCompleteDialog} onOpenChange={setShowManualCompleteDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserCheck className="w-5 h-5 text-orange-600" />
+              Manually Complete Step
+            </DialogTitle>
+            <DialogDescription>
+              Verify and manually mark this step as complete. This will trigger the next step in the workflow.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {/* Step Information */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm mb-1">
+                <span className="text-gray-600">Step:</span> <span className="font-semibold">{selectedStepForCompletion?.name}</span>
+              </p>
+              <p className="text-sm mb-1">
+                <span className="text-gray-600">Application ID:</span> <span>{claimId}</span>
+              </p>
+              <p className="text-sm">
+                <span className="text-gray-600">Current Status:</span>{' '}
+                <Badge className="bg-gray-100 text-gray-700 border-0">{selectedStepForCompletion?.status}</Badge>
+              </p>
+            </div>
+
+            {/* Step Data Preview */}
+            {selectedStepForCompletion && (
+              <div className="space-y-4">
+                <div>
+                  <Label className="mb-2 block">Step Summary</Label>
+                  <div className="bg-gray-50 border rounded-lg p-3 text-sm text-gray-700">
+                    {selectedStepForCompletion.summary || 'No summary available'}
+                  </div>
+                </div>
+
+                {/* Step Dependencies Visualization */}
+                {getDependentSteps(selectedStepForCompletion.name).length > 0 && (
+                  <div>
+                    <Label className="mb-2 block">Steps That Depend on This Step</Label>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <p className="text-xs text-blue-800 mb-2">
+                        Completing this step will enable the following steps:
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {getDependentSteps(selectedStepForCompletion.name).map((depStep) => {
+                          const depStepData = agentSteps.find(s => s.name === depStep);
+                          const isCompleted = depStepData?.status === 'completed';
+                          return (
+                            <Badge
+                              key={depStep}
+                              className={`text-xs ${
+                                isCompleted
+                                  ? 'bg-green-100 text-green-700 border-green-300'
+                                  : 'bg-blue-100 text-blue-700 border-blue-300'
+                              } border`}
+                            >
+                              {depStep} {isCompleted && '✓'}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Admin Notes */}
+            <div>
+              <Label htmlFor="manual-completion-notes" className="mb-2 block">
+                Admin Notes <span className="text-red-500">*</span>
+              </Label>
+              <Textarea
+                id="manual-completion-notes"
+                placeholder="Explain why you are manually completing this step (e.g., verified data manually, agent workflow stuck, external verification completed...)"
+                value={manualCompletionNotes}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setManualCompletionNotes(e.target.value)}
+                rows={4}
+                className="resize-none"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                These notes will be recorded in the audit trail and visible to other admins.
+              </p>
+            </div>
+
+            {/* Confirmation Checkbox */}
+            <div className="flex items-start space-x-3 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <Checkbox
+                id="manual-completion-confirm"
+                checked={manualCompletionConfirmed}
+                onCheckedChange={(checked) => setManualCompletionConfirmed(checked === true)}
+                className="mt-1"
+              />
+              <label htmlFor="manual-completion-confirm" className="flex-1 cursor-pointer">
+                <p className="text-sm font-semibold text-yellow-900">
+                  I have verified this step is complete
+                </p>
+                <p className="text-xs text-yellow-700 mt-1">
+                  By checking this box, you confirm that you have reviewed the step data and verified that it should be marked as complete.
+                </p>
+              </label>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowManualCompleteDialog(false);
+              setManualCompletionNotes('');
+              setManualCompletionConfirmed(false);
+            }}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-orange-600 hover:bg-orange-700"
+              onClick={handleSubmitManualCompletion}
+              disabled={
+                !manualCompletionNotes.trim() || 
+                !manualCompletionConfirmed || 
+                (stepValidationWarning && !showOverrideConfirmation)
+              }
+            >
+              <UserCheck className="w-4 h-4 mr-2" />
+              Mark as Complete
             </Button>
           </DialogFooter>
         </DialogContent>

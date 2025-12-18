@@ -5,7 +5,7 @@ import {
   CreditCard, ArrowRight, ArrowLeft, Edit2, Check, Info, 
   Clock, Star, Loader2, X, Mail, Home, Calendar, DollarSign,
   FileCheck, Briefcase, Activity, Umbrella, Download, Share2, 
-  ChevronRight, Save, Play
+  ChevronRight, Save, Play, Trash2
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -210,61 +210,302 @@ export default function LifeInsurance() {
     setAssistantMessage(getAssistantMessage(newStep));
   };
 
-  // Handle file upload
-  const handleFileUpload = useCallback((files: FileList | null) => {
-    if (!files) return;
-    const fileArray = Array.from(files).map(f => ({
-      file: f,
-      type: 'other', // Default to 'other' instead of 'kyc_document' - user should select appropriate type
-      progress: 0,
-      uploading: false,
-      error: null,
-      uploadedUrl: null,
-      documentId: null
-    }));
-    setUploadedFiles(prev => [...prev, ...fileArray]);
-    toast.success(`${fileArray.length} file(s) queued for upload. Please select document type for each file.`);
-  }, []);
-
   // Upload a single file by index (used for retry or individual upload)
-  const uploadFileAtIndex = async (index: number) => {
-    const fileObj = uploadedFiles[index];
-    if (!fileObj) return null;
+  const uploadFileAtIndex = useCallback(async (index: number) => {
+    // Get file from state using functional update to ensure we have latest state
+    let fileObj: { file: File; type: string; progress: number; uploading: boolean; error?: string | null; uploadedUrl?: string | null; documentId?: any } | null = null;
+    
+    setUploadedFiles(prev => {
+      fileObj = prev[index] || null;
+      return prev; // Don't modify, just read
+    });
+    
+    if (!fileObj) {
+      console.warn(`File at index ${index} not found`);
+      return null;
+    }
+    
+    // Prevent uploading if already uploading or already uploaded successfully
+    if (fileObj.uploading) {
+      console.warn(`File at index ${index} is already uploading`);
+      return null;
+    }
+    
+    // If already uploaded successfully, don't re-upload unless explicitly retrying
+    if (fileObj.uploadedUrl && !fileObj.error) {
+      console.log(`File at index ${index} already uploaded successfully`);
+      return { fileUrl: fileObj.uploadedUrl, documentId: fileObj.documentId };
+    }
+    
     const userIdForUpload = user?.id || localStorage.getItem('userId') || '1';
 
-    // mark uploading
+    // Mark uploading and clear any previous errors
     setUploadedFiles(prev => {
       const next = [...prev];
-      next[index] = { ...next[index], uploading: true, progress: 0, error: null };
+      if (next[index]) {
+        next[index] = { 
+          ...next[index], 
+          uploading: true, 
+          progress: 0, 
+          error: null 
+        };
+      }
       return next;
     });
 
     try {
       console.log(`[DOCUMENT_UPLOAD] uploadFileAtIndex - Uploading file at index ${index}:`, fileObj.file.name, 'with documentType:', fileObj.type);
-      const res = await uploadDocument(fileObj.file, fileObj.type, userIdForUpload, undefined, (p) => {
+      
+      // Add timeout for upload (5 minutes max)
+      const uploadPromise = uploadDocument(fileObj.file, fileObj.type, userIdForUpload, undefined, (p) => {
         setUploadedFiles(prev => {
           const next = [...prev];
-          next[index] = { ...next[index], progress: p };
+          if (next[index] && next[index].uploading) {
+            next[index] = { ...next[index], progress: p };
+          }
           return next;
         });
       });
+      
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Upload timeout: Request took too long')), 5 * 60 * 1000);
+      });
+      
+      const res = await Promise.race([uploadPromise, timeoutPromise]) as any;
 
       setUploadedFiles(prev => {
         const next = [...prev];
-        next[index] = { ...next[index], uploading: false, progress: 100, uploadedUrl: res.fileUrl || res.fileurl || null, documentId: res.documentId || res.documentId || res.documentId || null };
+        if (next[index]) {
+          next[index] = { 
+            ...next[index], 
+            uploading: false, 
+            progress: 100, 
+            uploadedUrl: res.fileUrl || res.fileurl || null, 
+            documentId: res.documentId || null,
+            error: null
+          };
+        }
         return next;
       });
 
+      toast.success(`File "${fileObj.file.name}" uploaded successfully!`);
       return res;
     } catch (e: any) {
+      // Categorize errors for better user feedback
+      let errorMessage = 'Upload failed';
+      
+      if (e?.message) {
+        if (e.message.includes('timeout') || e.message.includes('time')) {
+          errorMessage = 'Upload timeout: Please check your connection and try again';
+        } else if (e.message.includes('network') || e.message.includes('Network') || e.message.includes('Failed to fetch')) {
+          errorMessage = 'Network error: Please check your internet connection';
+        } else if (e.message.includes('413') || e.message.includes('too large')) {
+          errorMessage = 'File too large: Maximum size is 10MB';
+        } else if (e.message.includes('415') || e.message.includes('type')) {
+          errorMessage = 'File type not supported';
+        } else if (e.message.includes('401') || e.message.includes('403')) {
+          errorMessage = 'Authentication error: Please log in again';
+        } else if (e.message.includes('500') || e.message.includes('server')) {
+          errorMessage = 'Server error: Please try again later';
+        } else {
+          errorMessage = e.message;
+        }
+      }
+      
       setUploadedFiles(prev => {
         const next = [...prev];
-        next[index] = { ...next[index], uploading: false, error: e?.message || 'Upload failed' };
+        if (next[index]) {
+          next[index] = { 
+            ...next[index], 
+            uploading: false, 
+            error: errorMessage,
+            progress: 0 // Reset progress on error
+          };
+        }
         return next;
       });
+      
+      toast.error(`Failed to upload "${fileObj.file.name}": ${errorMessage}`, { duration: 5000 });
       throw e;
     }
-  };
+  }, [user]);
+
+  // Handle file upload
+  const handleFileUpload = useCallback((files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+    const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+    const ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png'];
+    
+    // Validate and process files
+    const validFiles: File[] = [];
+    const invalidFiles: { name: string; reason: string }[] = [];
+    
+    // Get existing file names to check for duplicates
+    setUploadedFiles(prev => {
+      const existingNames = new Set(prev.map(f => f.file.name.toLowerCase()));
+      
+      Array.from(files).forEach(file => {
+        // Check for duplicate files
+        if (existingNames.has(file.name.toLowerCase())) {
+          invalidFiles.push({ name: file.name, reason: 'File already uploaded' });
+          return;
+        }
+        
+        // Check if file is empty
+        if (file.size === 0) {
+          invalidFiles.push({ name: file.name, reason: 'File is empty' });
+          return;
+        }
+        
+        // Check file size
+        if (file.size > MAX_FILE_SIZE) {
+          const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+          invalidFiles.push({ 
+            name: file.name, 
+            reason: `File size (${sizeMB}MB) exceeds 10MB limit` 
+          });
+          return;
+        }
+        
+        // Check file type by MIME type
+        const hasValidMimeType = ALLOWED_TYPES.includes(file.type);
+        // Check file type by extension (fallback for files without MIME type)
+        const hasValidExtension = ALLOWED_EXTENSIONS.some(ext => 
+          file.name.toLowerCase().endsWith(ext)
+        );
+        
+        if (!hasValidMimeType && !hasValidExtension) {
+          invalidFiles.push({ 
+            name: file.name, 
+            reason: 'File type not supported. Only PDF, JPG, PNG allowed' 
+          });
+          return;
+        }
+        
+        validFiles.push(file);
+        existingNames.add(file.name.toLowerCase());
+      });
+      
+      return prev; // Don't modify, just read
+    });
+    
+    // Show errors for invalid files
+    if (invalidFiles.length > 0) {
+      invalidFiles.forEach(({ name, reason }) => {
+        toast.error(`${name}: ${reason}`, { duration: 4000 });
+      });
+    }
+    
+    if (validFiles.length === 0) {
+      if (invalidFiles.length > 0) {
+        toast.warning('No valid files to upload. Please check file requirements.');
+      }
+      return;
+    }
+    
+    // Add valid files to state with default type 'kyc_document'
+    setUploadedFiles(prev => {
+      const startIndex = prev.length;
+      const fileArray = validFiles.map(f => ({
+        file: f,
+        type: 'kyc_document', // Default to 'kyc_document' for auto-upload
+        progress: 0,
+        uploading: false,
+        error: null,
+        uploadedUrl: null,
+        documentId: null
+      }));
+      
+      const newFiles = [...prev, ...fileArray];
+      
+      // Automatically start uploading each new file after state update
+      // Use queueMicrotask to ensure state is updated before accessing indices
+      // Upload files sequentially to avoid overwhelming the server
+      queueMicrotask(() => {
+        validFiles.forEach((_, index) => {
+          const fileIndex = startIndex + index;
+          // Small delay between uploads to prevent race conditions
+          setTimeout(() => {
+            uploadFileAtIndex(fileIndex);
+          }, index * 100); // 100ms delay between each upload
+        });
+      });
+      
+      return newFiles;
+    });
+    
+    toast.success(`${validFiles.length} file(s) uploading automatically...`);
+  }, [user, uploadFileAtIndex]);
+
+  // Handle document type change - may require re-upload if already uploaded
+  const handleDocumentTypeChange = useCallback((index: number, newType: string) => {
+    setUploadedFiles(prev => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      
+      const fileObj = next[index];
+      const oldType = fileObj.type;
+      
+      // Don't allow type change if currently uploading
+      if (fileObj.uploading) {
+        toast.warning('Cannot change document type while upload is in progress');
+        return prev; // Don't modify
+      }
+      
+      // If type hasn't changed, do nothing
+      if (oldType === newType) {
+        return prev;
+      }
+      
+      // Update the type
+      next[index] = { ...next[index], type: newType };
+      
+      // If file was already uploaded successfully with different type, mark for re-upload
+      if (fileObj.uploadedUrl && oldType !== newType) {
+        // Clear uploaded status to allow re-upload with new type
+        next[index] = {
+          ...next[index],
+          uploadedUrl: null,
+          documentId: null,
+          progress: 0,
+          error: null
+        };
+        
+        // Show notification and auto-retry upload with new type
+        toast.info(`Document type changed. Re-uploading "${fileObj.file.name}" with new type...`);
+        
+        // Trigger re-upload after a short delay to ensure state is updated
+        setTimeout(() => {
+          uploadFileAtIndex(index);
+        }, 500);
+      } else if (!fileObj.uploadedUrl && !fileObj.uploading) {
+        // File hasn't been uploaded yet, just update the type
+        // The upload will use the new type automatically when it starts
+      }
+      
+      return next;
+    });
+  }, [uploadFileAtIndex]);
+
+  // Remove a file from the upload list
+  const removeFile = useCallback((index: number) => {
+    setUploadedFiles(prev => {
+      const next = [...prev];
+      const fileObj = next[index];
+      
+      if (fileObj?.uploading) {
+        toast.warning('Cannot remove file while upload is in progress');
+        return prev;
+      }
+      
+      // Remove the file
+      const newFiles = next.filter((_, i) => i !== index);
+      toast.success(`File "${fileObj?.file.name}" removed`);
+      return newFiles;
+    });
+  }, []);
 
   // Handle drag and drop
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -847,58 +1088,118 @@ export default function LifeInsurance() {
                     {uploadedFiles.length > 0 && (
                       <div className="space-y-2">
                         <Label>Uploaded Files ({uploadedFiles.length})</Label>
-                        {uploadedFiles.map((fobj, idx) => (
-                          <div key={idx} className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                            <FileCheck className="w-5 h-5 text-green-600" />
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium">{fobj.file.name}</span>
-                                <select
-                                  value={fobj.type}
-                                  onChange={(e) => {
-                                    const t = e.target.value;
-                                    setUploadedFiles(prev => {
-                                      const next = [...prev];
-                                      next[idx] = { ...next[idx], type: t };
-                                      return next;
-                                    });
-                                  }}
-                                  className="text-xs rounded px-2 py-1 border"
-                                >
-                                  <option value="kyc_document">KYC Document</option>
-                                  <option value="id_card">ID Card</option>
-                                  <option value="pan_card">PAN</option>
-                                  <option value="policy_document">Previous Policy</option>
-                                  <option value="other">Other</option>
-                                </select>
-                              </div>
+                        {uploadedFiles.map((fobj, idx) => {
+                          // Determine status and styling based on file state
+                          const isUploading = fobj.uploading;
+                          const isSuccess = fobj.uploadedUrl && !fobj.error;
+                          const isError = fobj.error && !fobj.uploading;
+                          const isPending = !isUploading && !isSuccess && !isError;
+                          
+                          // Dynamic styling based on status
+                          const bgColor = isError 
+                            ? 'bg-red-50 border-red-200' 
+                            : isSuccess 
+                            ? 'bg-green-50 border-green-200' 
+                            : isUploading
+                            ? 'bg-blue-50 border-blue-200'
+                            : 'bg-gray-50 border-gray-200';
+                          
+                          const iconColor = isError 
+                            ? 'text-red-600' 
+                            : isSuccess 
+                            ? 'text-green-600' 
+                            : isUploading
+                            ? 'text-blue-600'
+                            : 'text-gray-400';
+                          
+                          const progressColor = isError 
+                            ? 'bg-red-500' 
+                            : isSuccess 
+                            ? 'bg-green-500' 
+                            : 'bg-blue-500';
 
-                              <div className="mt-2">
-                                <div className="w-full bg-gray-200 h-2 rounded overflow-hidden">
-                                  <div className="h-2 bg-green-500" style={{ width: `${fobj.progress}%` }} />
+                          return (
+                            <div key={idx} className={`flex items-center gap-3 p-3 border rounded-lg ${bgColor} transition-colors`}>
+                              {/* Status Icon */}
+                              <div className={iconColor}>
+                                {isUploading ? (
+                                  <Loader2 className="w-5 h-5 animate-spin" />
+                                ) : isSuccess ? (
+                                  <CheckCircle className="w-5 h-5" />
+                                ) : isError ? (
+                                  <AlertCircle className="w-5 h-5" />
+                                ) : (
+                                  <FileCheck className="w-5 h-5" />
+                                )}
+                              </div>
+                              
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                  <span className="text-sm font-medium truncate" title={fobj.file.name}>
+                                    {fobj.file.name}
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <select
+                                      value={fobj.type}
+                                      onChange={(e) => handleDocumentTypeChange(idx, e.target.value)}
+                                      disabled={isUploading}
+                                      className="text-xs rounded px-2 py-1 border bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      <option value="kyc_document">KYC Document</option>
+                                      <option value="id_card">ID Card</option>
+                                      <option value="pan_card">PAN</option>
+                                      <option value="policy_document">Previous Policy</option>
+                                      <option value="other">Other</option>
+                                    </select>
+                                    {!isUploading && (
+                                      <button
+                                        type="button"
+                                        onClick={() => removeFile(idx)}
+                                        className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-colors"
+                                        title="Remove file"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
-                                <div className="flex items-center justify-between text-xs mt-1">
-                                  <span>{fobj.progress}%</span>
-                                  <span className="text-red-600">{fobj.error || ''}</span>
+
+                                {/* Progress Bar */}
+                                <div className="mt-2">
+                                  <div className="w-full bg-gray-200 h-2 rounded overflow-hidden">
+                                    <div 
+                                      className={`h-2 transition-all duration-300 ${progressColor}`} 
+                                      style={{ width: `${fobj.progress}%` }} 
+                                    />
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs mt-1">
+                                    <span className={isError ? 'text-red-600' : isSuccess ? 'text-green-600' : 'text-gray-600'}>
+                                      {isUploading ? `Uploading... ${fobj.progress}%` : isSuccess ? 'Uploaded successfully' : isError ? 'Upload failed' : 'Ready to upload'}
+                                    </span>
+                                    {fobj.error && (
+                                      <span className="text-red-600 font-medium">{fobj.error}</span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                            <div className="flex flex-col gap-2">
-                              {fobj.uploading ? (
-                                <span className="text-xs">Uploading...</span>
-                              ) : fobj.uploadedUrl ? (
-                                <CheckCircle className="w-5 h-5 text-green-600" />
-                              ) : (
-                                <button
-                                  className="text-xs underline"
-                                  onClick={() => uploadFileAtIndex(idx)}
-                                >
-                                  Upload
-                                </button>
+                              
+                              {/* Action Button - Only show retry for errors */}
+                              {isError && (
+                                <div className="flex flex-col gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => uploadFileAtIndex(idx)}
+                                    className="text-xs h-8"
+                                  >
+                                    Retry
+                                  </Button>
+                                </div>
                               )}
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
 

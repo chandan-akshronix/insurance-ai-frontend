@@ -336,6 +336,7 @@ class ApplicationProcessCreate(ApplicationProcessBase):
     startTime: date
     agentData: Optional[dict] = None
     stepHistory: Optional[List[dict]] = None
+    auditTrail: Optional[List[dict]] = None
 
 
 class ApplicationProcessUpdate(BaseModel):
@@ -343,6 +344,7 @@ class ApplicationProcessUpdate(BaseModel):
     currentStep: Optional[str] = None
     agentData: Optional[dict] = None
     stepHistory: Optional[List[dict]] = None
+    auditTrail: Optional[List[dict]] = None
     reviewReason: Optional[str] = None
     assignedTo: Optional[str] = None
     lastUpdated: Optional[date] = None
@@ -352,6 +354,7 @@ class ApplicationProcess(ApplicationProcessBase):
     id: int
     agentData: Optional[dict] = None
     stepHistory: Optional[List[dict]] = None
+    auditTrail: Optional[List[dict]] = None
     reviewReason: Optional[str] = None
     startTime: date
     lastUpdated: Optional[date] = None

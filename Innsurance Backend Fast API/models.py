@@ -238,6 +238,7 @@ class ApplicationProcess(Base):
     currentStep = Column(String)
     agentData = Column(JSON, nullable=True)
     stepHistory = Column(JSON, nullable=True)
+    auditTrail = Column(JSON, nullable=True)  # Store audit entries for manual completions and actions
     reviewReason = Column(String, nullable=True)
     assignedTo = Column(String, nullable=True)
     customerId = Column(Integer, ForeignKey("users.id"), nullable=True)
