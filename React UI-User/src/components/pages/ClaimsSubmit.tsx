@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Check, Upload, X, FileText, Image as ImageIcon, AlertCircle, Calendar, MapPin, User, Phone, Mail, CreditCard, ArrowLeft, ArrowRight, CheckCircle, Heart, Car, Activity, Plus, Info, Building2, Stethoscope, Clock, Download, Camera, Briefcase, Shield, Award } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Check, Upload, X, FileText, Image as ImageIcon, AlertCircle, Calendar, MapPin, User, Phone, Mail, CreditCard, ArrowLeft, ArrowRight, CheckCircle, Heart, Car, Activity, Plus, Info, Building2, Stethoscope, Clock, Download, Camera, Briefcase, Shield, Award, Loader2, FileCheck, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -14,35 +14,62 @@ import { toast } from 'sonner@2.0.3';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { Checkbox } from '../ui/checkbox';
 import { Separator } from '../ui/separator';
+import { useAuth } from '../../contexts/AuthContext';
+import { createClaimApplication, updateClaimApplication, uploadDocument, getUserPolicies } from '../../services/api';
 
 interface UploadedFile {
   id: string;
+  file: File;                    // File object for actual upload
   name: string;
   size: number;
-  type: string;
-  category: string;
-  preview?: string;
+  type: string;                  // MIME type
+  category: string;              // Document category (e.g., "hospital-bills")
+  preview?: string;              // Preview URL for images
+  progress?: number;             // Upload progress (0-100)
+  uploading?: boolean;           // Upload status
+  error?: string | null;         // Upload error message
+  uploadedUrl?: string | null;   // Azure Blob URL (after successful upload)
+  documentId?: number | null;   // PostgreSQL document ID (after successful upload)
 }
 
-const mockPolicies = {
-  health: [
-    { id: 'HLT001', name: 'Health Shield Plus', policyNumber: 'HLT/2024/001', sumInsured: '₹5 Lakhs', expiryDate: '2025-12-31', insurer: 'HDFC ERGO' },
-    { id: 'HLT002', name: 'Family Floater', policyNumber: 'HLT/2024/002', sumInsured: '₹10 Lakhs', expiryDate: '2025-10-15', insurer: 'Star Health' }
-  ],
-  life: [
-    { id: 'LIF001', name: 'Term Life 50L', policyNumber: 'LIF/2023/001', sumInsured: '₹50 Lakhs', expiryDate: '2043-06-30', insurer: 'ICICI Prudential' }
-  ],
-  car: [
-    { id: 'CAR001', name: 'Comprehensive Car', policyNumber: 'CAR/2024/001', vehicle: 'MH01AB1234', sumInsured: '₹8 Lakhs', expiryDate: '2025-08-20', insurer: 'Bajaj Allianz' }
-  ]
-};
+// Policy interface to match backend response from /policy/user/{userId}
+// Based on backend router policy.py get_policies_by_user endpoint
+interface Policy {
+  id?: number;                    // May not be present in API response
+  policyId?: number;              // Primary field from backend (p.id)
+  userId?: number;                // User ID
+  type: string;                   // Policy type enum: 'life_insurance', 'vehicle_insurance', 'health_insurance'
+  planName: string;               // Policy plan name
+  policyNumber: string;           // Unique policy number
+  coverage: number | string;      // Coverage amount (number from backend)
+  premium?: number | string;      // Premium amount (optional)
+  status?: string;                // Policy status (e.g., 'Active')
+  expiryDate?: string;            // Expiry date in ISO format
+  startDate?: string;             // Start date in ISO format (optional)
+  validTill?: string;             // Alternative field name (may not exist)
+  benefits?: any;                 // Benefits JSON (optional)
+  nominee?: string;               // Nominee name (optional)
+  nomineeId?: number;             // Nominee ID (optional)
+  personalDetails?: any;          // Personal details JSON (optional)
+  policyDocument?: string;        // Policy document URL (optional)
+  // Note: Backend does not return insuranceCompany or insurer fields
+  // These are handled as fallback in mapPolicyToUI
+}
 
 export default function ClaimsSubmit() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [step, setStep] = useState(1);
   const [claimType, setClaimType] = useState<'health' | 'life' | 'car' | ''>('');
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [claimNumber, setClaimNumber] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Policy states
+  const [policies, setPolicies] = useState<Policy[]>([]);
+  const [loadingPolicies, setLoadingPolicies] = useState<boolean>(false);
+  const [policiesError, setPoliciesError] = useState<string | null>(null);
+  
   const [formData, setFormData] = useState({
     // Step 1: Claim Type & Policy
     selectedPolicy: '',
@@ -134,17 +161,173 @@ export default function ClaimsSubmit() {
   const handleFileUpload = (files: FileList | null, category: string) => {
     if (!files) return;
     
+    // Validate category if claim type is set
+    if (claimType && category) {
+      try {
+        // Import category validation (dynamic import to avoid circular dependencies)
+        const { isValidCategory, normalizeCategoryId } = require('../../utils/categoryMapping');
+        const normalizedCategory = normalizeCategoryId(category);
+        
+        if (!isValidCategory(claimType as 'health' | 'life' | 'car', normalizedCategory)) {
+          console.warn(`[CLAIM_DOCUMENT_UPLOAD] ⚠️  Category '${category}' (normalized: '${normalizedCategory}') may not be valid for claim type '${claimType}'`);
+          // Don't block upload, but log warning
+        } else {
+          console.log(`[CLAIM_DOCUMENT_UPLOAD] ✅ Category '${category}' validated for claim type '${claimType}'`);
+        }
+      } catch (error) {
+        console.debug('[CLAIM_DOCUMENT_UPLOAD] Category validation not available:', error);
+      }
+    }
+    
+    const userIdForUpload = user?.id || localStorage.getItem('userId') || '1';
+    const policyIdForUpload = formData.selectedPolicy ? String(formData.selectedPolicy) : undefined;
+    
+    // Create file objects
     const newFiles: UploadedFile[] = Array.from(files).map(file => ({
       id: Math.random().toString(36).substr(2, 9),
+      file: file,                    // Store File object for actual upload
       name: file.name,
       size: file.size,
       type: file.type,
-      category,
-      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined
+      category,                      // Category ID (e.g., "death-certificate")
+      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+      progress: 0,                   // Initialize progress
+      uploading: true,               // Start uploading immediately
+      error: null,                    // No error initially
+      uploadedUrl: null,              // Will be set after successful upload
+      documentId: null                // Will be set after successful upload
     }));
     
-    setUploadedFiles(prev => [...prev, ...newFiles]);
-    toast.success(`${newFiles.length} file(s) uploaded`);
+    // Add files to state and upload immediately (like application process)
+    setUploadedFiles(prev => {
+      const updated = [...prev, ...newFiles];
+      
+      // Upload each new file immediately
+      newFiles.forEach((fileObj, localIndex) => {
+        const globalIndex = prev.length + localIndex;
+        
+        // Upload immediately (no claimId yet, will be updated later if needed)
+        // Pass category to organize documents in folders
+        uploadDocument(
+          fileObj.file,
+          'claim_document',
+          userIdForUpload,
+          policyIdForUpload,
+          undefined, // No claimId yet - will upload to claims/pending/{userId}
+          (progress) => {
+            // Update progress using functional update
+            setUploadedFiles(current => {
+              const next = [...current];
+              if (next[globalIndex] && next[globalIndex].id === fileObj.id) {
+                next[globalIndex] = { ...next[globalIndex], progress };
+              }
+              return next;
+            });
+          },
+          fileObj.category // Pass category for folder organization
+        ).then((res) => {
+          // Extract fileUrl with multiple fallbacks
+          const fileUrl = res.fileUrl || res.fileurl || res.url || null;
+          const documentId = res.documentId || res.document_id || res.id || null;
+          
+          if (!fileUrl) {
+            throw new Error('Upload succeeded but no file URL returned from server');
+          }
+          
+          // Verify Azure Blob Storage URL
+          const isAzureUrl = fileUrl.includes('blob.core.windows.net');
+          if (!isAzureUrl) {
+            console.warn(`[CLAIM_DOCUMENT_UPLOAD] ⚠️  File uploaded but not to Azure: ${fileUrl}`);
+            console.warn(`[CLAIM_DOCUMENT_UPLOAD] Expected Azure URL (blob.core.windows.net), got: ${fileUrl.substring(0, 100)}`);
+          }
+          
+          // Update state with success
+          setUploadedFiles(current => {
+            const next = [...current];
+            const fileIndex = next.findIndex(f => f.id === fileObj.id);
+            if (fileIndex !== -1) {
+              next[fileIndex] = { 
+                ...next[fileIndex], 
+                uploadedUrl: fileUrl,
+                documentId: documentId,
+                progress: 100,
+                uploading: false,
+                error: null
+              };
+            }
+            return next;
+          });
+          
+          console.log(`[CLAIM_DOCUMENT_UPLOAD] ✅ File uploaded successfully`);
+          console.log(`[CLAIM_DOCUMENT_UPLOAD]   URL: ${fileUrl.substring(0, 100)}...`);
+          console.log(`[CLAIM_DOCUMENT_UPLOAD]   Azure Storage: ${isAzureUrl ? '✅ YES' : '❌ NO'}`);
+          console.log(`[CLAIM_DOCUMENT_UPLOAD]   Document ID: ${documentId}`);
+          console.log(`[CLAIM_DOCUMENT_UPLOAD]   Category: ${fileObj.category}`);
+          
+          // Verify Azure URL and log for debugging
+          if (isAzureUrl) {
+            console.log(`[CLAIM_DOCUMENT_UPLOAD] ✅ Verified: Document is in Azure Blob Storage`);
+            toast.success(`"${fileObj.name}" uploaded to Azure Blob Storage successfully!`);
+          } else {
+            console.warn(`[CLAIM_DOCUMENT_UPLOAD] ⚠️  WARNING: Document uploaded but NOT to Azure Storage`);
+            console.warn(`[CLAIM_DOCUMENT_UPLOAD]   URL: ${fileUrl}`);
+            console.warn(`[CLAIM_DOCUMENT_UPLOAD]   Expected: blob.core.windows.net in URL`);
+            toast.warning(`"${fileObj.name}" uploaded, but not to Azure Storage. Check backend configuration.`);
+          }
+        }).catch((error: any) => {
+          console.error(`[CLAIM_DOCUMENT_UPLOAD] ❌ Upload failed for ${fileObj.name}:`, error);
+          
+          // Categorize errors for better user feedback
+          let errorMessage = 'Upload failed';
+          let isAzureError = false;
+          
+          if (error?.message) {
+            const msg = error.message.toLowerCase();
+            if (msg.includes('azure') || msg.includes('blob') || msg.includes('storage')) {
+              errorMessage = 'Azure Storage error: Please try again or contact support';
+              isAzureError = true;
+            } else if (msg.includes('timeout') || msg.includes('time')) {
+              errorMessage = 'Upload timeout: Please check your connection and try again';
+            } else if (msg.includes('network') || msg.includes('failed to fetch')) {
+              errorMessage = 'Network error: Please check your internet connection';
+            } else if (msg.includes('413') || msg.includes('too large')) {
+              errorMessage = 'File too large: Maximum size is 10MB';
+            } else if (msg.includes('415') || msg.includes('type')) {
+              errorMessage = 'File type not supported';
+            } else if (msg.includes('401') || msg.includes('403')) {
+              errorMessage = 'Authentication error: Please log in again';
+            } else if (msg.includes('500') || msg.includes('server')) {
+              errorMessage = 'Server error: Please try again later';
+            } else {
+              errorMessage = error.message;
+            }
+          }
+          
+          // Update state with error
+          setUploadedFiles(current => {
+            const next = [...current];
+            const fileIndex = next.findIndex(f => f.id === fileObj.id);
+            if (fileIndex !== -1) {
+              next[fileIndex] = { 
+                ...next[fileIndex], 
+                uploading: false,
+                error: errorMessage,
+                progress: 0
+              };
+            }
+            return next;
+          });
+          
+          if (isAzureError) {
+            toast.error(`Azure Storage Error: "${fileObj.name}" - ${errorMessage}`);
+          } else {
+            toast.error(`Failed to upload "${fileObj.name}": ${errorMessage}`);
+          }
+        });
+      });
+      
+      return updated;
+    });
   };
 
   const removeFile = (fileId: string) => {
@@ -158,6 +341,326 @@ export default function ClaimsSubmit() {
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  // Fetch policies from API on component mount
+  useEffect(() => {
+    const fetchPolicies = async () => {
+      setLoadingPolicies(true);
+      setPoliciesError(null);
+      
+      try {
+        const userId = user?.id || localStorage.getItem('userId');
+        
+        if (!userId) {
+          console.warn('[CLAIMS] No userId available to fetch policies');
+          setLoadingPolicies(false);
+          return;
+        }
+
+        console.log('[CLAIMS] Fetching policies for userId:', userId);
+        const policiesData = await getUserPolicies(userId);
+        
+        // Handle array response directly
+        const policiesArray = Array.isArray(policiesData) ? policiesData : [];
+        console.log('[CLAIMS] Fetched policies:', policiesArray.length, 'policies');
+        
+        setPolicies(policiesArray);
+      } catch (error: any) {
+        console.error('[CLAIMS] Error fetching policies:', error);
+        setPoliciesError(error?.message || 'Failed to load policies');
+        toast.error('Failed to load policies. Please refresh the page.');
+      } finally {
+        setLoadingPolicies(false);
+      }
+    };
+
+    fetchPolicies();
+  }, [user]);
+
+  // Filter policies by claim type
+  const getPoliciesByType = (claimType: string): Policy[] => {
+    if (!claimType || !policies.length) return [];
+    
+    return policies.filter(policy => {
+      const policyType = (policy.type || '').toLowerCase();
+      const policyName = (policy.planName || '').toLowerCase();
+      
+      switch(claimType) {
+        case 'health':
+          return policyType.includes('health') || 
+                 policyType.includes('medical') ||
+                 policyName.includes('health') ||
+                 policyType === 'health_insurance';
+        case 'life':
+          return policyType.includes('life') || 
+                 policyType.includes('term') ||
+                 policyType === 'life_insurance';
+        case 'car':
+          return policyType.includes('car') || 
+                 policyType.includes('vehicle') ||
+                 policyType.includes('motor') ||
+                 policyType === 'vehicle_insurance';
+        default:
+          return false;
+      }
+    });
+  };
+
+  // Map backend policy to UI format
+  const mapPolicyToUI = (policy: Policy) => {
+    // Format coverage amount
+    const formatCoverage = (coverage: number | string): string => {
+      if (typeof coverage === 'string') {
+        // If already formatted, return as is
+        if (coverage.includes('₹') || coverage.includes('Lakhs')) {
+          return coverage;
+        }
+        // Try to parse
+        const num = parseFloat(coverage);
+        if (isNaN(num)) return coverage;
+        coverage = num;
+      }
+      
+      if (coverage >= 100000) {
+        return `₹${(coverage / 100000).toFixed(1)} Lakhs`;
+      } else if (coverage >= 1000) {
+        return `₹${(coverage / 1000).toFixed(0)}K`;
+      }
+      return `₹${coverage}`;
+    };
+
+    // Format date
+    const formatDate = (dateStr?: string): string => {
+      if (!dateStr) return 'N/A';
+      try {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-IN', { 
+          day: '2-digit', 
+          month: '2-digit', 
+          year: 'numeric' 
+        });
+      } catch {
+        return dateStr;
+      }
+    };
+
+    return {
+      id: String(policy.policyId || policy.id || ''),
+      name: policy.planName || 'Unnamed Policy',
+      policyNumber: policy.policyNumber || 'N/A',
+      sumInsured: formatCoverage(policy.coverage || 0),
+      expiryDate: formatDate(policy.expiryDate || policy.validTill),
+      // Note: Backend API does not return insuranceCompany or insurer field
+      // Using 'Unknown' as fallback, but this could be extracted from planName if needed
+      insurer: 'Unknown',
+      // Additional fields for car insurance
+      vehicle: undefined, // Will be added if available in policy (e.g., from personalDetails)
+      // Store original policy for reference
+      originalPolicy: policy
+    };
+  };
+
+  // Upload a single file at the given index
+  const uploadFileAtIndex = async (index: number, claimId?: string | number) => {
+    // Get file from state
+    let fileObj: UploadedFile | null = null;
+    
+    setUploadedFiles(prev => {
+      fileObj = prev[index] || null;
+      return prev; // Don't modify, just read
+    });
+    
+    if (!fileObj || !fileObj.file) {
+      console.warn(`File at index ${index} not found or no file object`);
+      return null;
+    }
+    
+    // Prevent uploading if already uploading
+    if (fileObj.uploading) {
+      console.warn(`File at index ${index} is already uploading`);
+      return null;
+    }
+    
+    // If already uploaded successfully, return existing data
+    if (fileObj.uploadedUrl && !fileObj.error) {
+      console.log(`File at index ${index} already uploaded successfully`);
+      return { 
+        fileUrl: fileObj.uploadedUrl, 
+        documentId: fileObj.documentId,
+        fileName: fileObj.name
+      };
+    }
+    
+    const userIdForUpload = user?.id || localStorage.getItem('userId') || '1';
+    const policyIdForUpload = formData.selectedPolicy || undefined;
+
+    // Mark uploading and clear any previous errors
+    setUploadedFiles(prev => {
+      const next = [...prev];
+      if (next[index]) {
+        next[index] = { 
+          ...next[index], 
+          uploading: true, 
+          progress: 0, 
+          error: null 
+        };
+      }
+      return next;
+    });
+
+    try {
+      console.log(`[CLAIM_DOCUMENT_UPLOAD] Uploading file at index ${index}:`, fileObj.file.name, 'with documentType: claim_document');
+      
+      // Upload document with claim_document type
+      // Use claimId if provided (after claim creation), otherwise undefined (will use pending folder)
+      // Pass category to organize documents in category-based folders
+      const res = await uploadDocument(
+        fileObj.file,
+        'claim_document',  // All claim documents use this type
+        userIdForUpload,
+        policyIdForUpload,
+        claimId,  // Will be undefined initially, set after claim creation
+        (progress) => {
+          // Update progress
+          setUploadedFiles(prev => {
+            const next = [...prev];
+            if (next[index] && next[index].uploading) {
+              next[index] = { ...next[index], progress };
+            }
+            return next;
+          });
+        },
+        fileObj.category // Pass category for folder organization (e.g., "death-certificate", "claim-form")
+      );
+
+      // Log full response for debugging
+      console.log(`[CLAIM_DOCUMENT_UPLOAD] Full API response:`, res);
+      console.log(`[CLAIM_DOCUMENT_UPLOAD] Response fileUrl:`, res.fileUrl || res.fileurl);
+      console.log(`[CLAIM_DOCUMENT_UPLOAD] Response documentId:`, res.documentId || res.document_id);
+      
+      // Extract fileUrl with multiple fallbacks
+      const fileUrl = res.fileUrl || res.fileurl || res.url || null;
+      const documentId = res.documentId || res.document_id || res.id || null;
+      
+      if (!fileUrl) {
+        console.error(`[CLAIM_DOCUMENT_UPLOAD] No fileUrl in response:`, res);
+        throw new Error('Upload succeeded but no file URL returned from server');
+      }
+
+      // Update state with uploaded URL and document ID
+      setUploadedFiles(prev => {
+        const next = [...prev];
+        if (next[index]) {
+          next[index] = { 
+            ...next[index], 
+            uploadedUrl: fileUrl,
+            documentId: documentId,
+            progress: 100,
+            uploading: false,
+            error: null
+          };
+        }
+        return next;
+      });
+
+      console.log(`[CLAIM_DOCUMENT_UPLOAD] File uploaded successfully:`, fileUrl);
+      return {
+        fileUrl: fileUrl,
+        documentId: documentId,
+        fileName: res.fileName || res.filename || fileObj.name,
+        category: fileObj.category // Preserve category
+      };
+    } catch (error: any) {
+      console.error(`[CLAIM_DOCUMENT_UPLOAD] Upload failed for file at index ${index}:`, error);
+      
+      // Update state with error
+      setUploadedFiles(prev => {
+        const next = [...prev];
+        if (next[index]) {
+          next[index] = { 
+            ...next[index], 
+            uploading: false,
+            error: error?.message || 'Upload failed'
+          };
+        }
+        return next;
+      });
+      
+      toast.error(`Failed to upload ${fileObj.name}: ${error?.message || 'Upload failed'}`);
+      throw error;
+    }
+  };
+
+  // Upload all files (can be called before or after claim creation)
+  const uploadAllFiles = async (claimId?: string | number) => {
+    console.log(`[CLAIM_DOCUMENT_UPLOAD] Starting upload for ${uploadedFiles.length} files with claimId: ${claimId}`);
+    
+    const uploadPromises = uploadedFiles.map((fileObj, index) => {
+      // Skip if already uploaded successfully
+      if (fileObj.uploadedUrl && !fileObj.error) {
+        console.log(`[CLAIM_DOCUMENT_UPLOAD] File ${index} already uploaded: ${fileObj.name}`);
+        return Promise.resolve({
+          fileUrl: fileObj.uploadedUrl,
+          documentId: fileObj.documentId,
+          fileName: fileObj.name,
+          category: fileObj.category
+        });
+      }
+      
+      // Upload file with error handling
+      return uploadFileAtIndex(index, claimId)
+        .then((res) => {
+          if (!res || !res.fileUrl) {
+            console.error(`[CLAIM_DOCUMENT_UPLOAD] Upload returned invalid result for file ${index}:`, res);
+            throw new Error(`Upload failed for ${fileObj.name}: Invalid response from server`);
+          }
+          console.log(`[CLAIM_DOCUMENT_UPLOAD] File ${index} uploaded successfully:`, res);
+          return {
+            ...res,
+            category: fileObj.category // Ensure category is preserved
+          };
+        })
+        .catch((error) => {
+          console.error(`[CLAIM_DOCUMENT_UPLOAD] Upload failed for file ${index} (${fileObj.name}):`, error);
+          // Re-throw with more context
+          throw new Error(`Failed to upload ${fileObj.name}: ${error.message || error}`);
+        });
+    });
+
+    try {
+      // Use Promise.allSettled to get all results (success and failures)
+      const results = await Promise.allSettled(uploadPromises);
+      
+      const successful: any[] = [];
+      const failed: any[] = [];
+      
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          successful.push(result.value);
+        } else {
+          failed.push({
+            index,
+            fileName: uploadedFiles[index]?.name,
+            error: result.reason
+          });
+        }
+      });
+      
+      console.log(`[CLAIM_DOCUMENT_UPLOAD] Upload summary: ${successful.length} succeeded, ${failed.length} failed`);
+      
+      if (failed.length > 0) {
+        console.error('[CLAIM_DOCUMENT_UPLOAD] Failed uploads:', failed);
+        // Show specific errors for failed uploads
+        const errorMessages = failed.map(f => `${f.fileName}: ${f.error?.message || 'Unknown error'}`).join(', ');
+        throw new Error(`Some documents failed to upload: ${errorMessages}`);
+      }
+      
+      return successful;
+    } catch (error) {
+      console.error('[CLAIM_DOCUMENT_UPLOAD] Upload process failed:', error);
+      throw error;
+    }
   };
 
   const getRequiredDocuments = () => {
@@ -238,12 +741,24 @@ export default function ClaimsSubmit() {
     }
     
     if (step === 4) {
+      // Pre-step validation: Check if required documents are uploaded
       const requiredDocs = getRequiredDocuments().filter(d => d.required);
       const uploadedCategories = new Set(uploadedFiles.map(f => f.category));
       const missingDocs = requiredDocs.filter(d => !uploadedCategories.has(d.id));
       
       if (missingDocs.length > 0) {
-        toast.error(`Please upload: ${missingDocs[0].name}`);
+        // Show which documents are missing with upload status
+        const uploadedCount = uploadedFiles.filter(f => f.uploadedUrl && !f.error).length;
+        const failedCount = uploadedFiles.filter(f => f.error).length;
+        
+        console.warn('[CLAIM_SUBMIT] Step 4 validation: Missing required documents');
+        console.warn('[CLAIM_SUBMIT] Uploaded:', uploadedCount, 'Failed:', failedCount, 'Missing:', missingDocs.length);
+        
+        const errorMessage = `Please upload required documents before proceeding:\n\n` +
+          `Missing: ${missingDocs.map(d => d.name).join(', ')}\n\n` +
+          `Status: ${uploadedCount} uploaded, ${failedCount} failed`;
+        
+        toast.error(errorMessage, { duration: 5000 });
         return;
       }
     }
@@ -269,14 +784,412 @@ export default function ClaimsSubmit() {
     setStep(step + 1);
   };
 
-  const handleSubmit = () => {
-    const newClaimNumber = `CLM${claimType.toUpperCase()}${Date.now()}`;
-    setClaimNumber(newClaimNumber);
-    toast.success('Claim submitted successfully!');
-    setStep(8); // Confirmation step
+  const handleSubmit = async () => {
+    // Validate required fields
+    if (!claimType || !formData.selectedPolicy) {
+      toast.error('Please select a policy');
+      return;
+    }
+
+    if (!formData.claimantName || !formData.claimantPhone || !formData.claimantEmail) {
+      toast.error('Please fill in all claimant details');
+      return;
+    }
+
+    // Validate required documents are uploaded (files exist in uploadedFiles)
+    const requiredDocs = getRequiredDocuments().filter(d => d.required);
+    const uploadedCategories = new Set(uploadedFiles.map(f => f.category));
+    const missingRequiredDocs = requiredDocs.filter(d => !uploadedCategories.has(d.id));
+    
+    if (missingRequiredDocs.length > 0) {
+      // Show detailed error with upload status for each document
+      const uploadedFilesList = uploadedFiles
+        .filter(f => f.category && f.uploadedUrl)
+        .map(f => ({ category: f.category, name: f.name, status: f.error ? 'Failed' : 'Uploaded' }));
+      
+      const missingDocNames = missingRequiredDocs.map(d => d.name);
+      
+      console.warn('[CLAIM_SUBMIT] Pre-submit validation: Missing required documents');
+      console.warn('[CLAIM_SUBMIT] Required:', requiredDocs.map(d => ({ id: d.id, name: d.name })));
+      console.warn('[CLAIM_SUBMIT] Uploaded:', uploadedFilesList);
+      console.warn('[CLAIM_SUBMIT] Missing:', missingDocNames);
+      
+      const errorMessage = `Please upload all required documents:\n\n` +
+        `Missing: ${missingDocNames.join(', ')}\n\n` +
+        `Uploaded: ${uploadedFilesList.length} document(s)\n` +
+        `Please upload the missing documents before submitting.`;
+      
+      toast.error(errorMessage, { duration: 6000 });
+      return;
+    }
+
+    setIsSubmitting(true);
+    
+    // Declare applicationId at function scope so it's available in catch block
+    let applicationId: string | undefined;
+
+    try {
+      // Get selected policy details from real policies
+      const filteredPolicies = getPoliciesByType(claimType);
+      const selectedPolicyObj = filteredPolicies.find(p => 
+        String(p.policyId || p.id) === String(formData.selectedPolicy)
+      );
+      
+      if (!selectedPolicyObj) {
+        toast.error('Selected policy not found. Please select a valid policy.');
+        setIsSubmitting(false);
+        return;
+      }
+      
+      // Extract the actual policy ID from backend response (policyId is the primary field)
+      const actualPolicyId = selectedPolicyObj.policyId || selectedPolicyObj.id;
+      
+      if (!actualPolicyId) {
+        toast.error('Invalid policy ID. Please select a valid policy.');
+        setIsSubmitting(false);
+        return;
+      }
+      
+      const selectedPolicy = mapPolicyToUI(selectedPolicyObj);
+      
+      console.log('[CLAIM_SUBMIT] Selected policy:', {
+        policyId: actualPolicyId,
+        policyNumber: selectedPolicy.policyNumber,
+        planName: selectedPolicy.name
+      });
+      
+      // Build payload structure
+      const payload: any = {
+        user_id: user?.id || localStorage.getItem('userId'),
+        userId: user?.id || localStorage.getItem('userId'), // Support both formats
+        claim_type: claimType,
+        policy_id: String(actualPolicyId), // Use actual policy ID from backend (policyId field)
+        status: 'submitted',
+        
+        // Intimation details
+        intimation_date: formData.intimationDate,
+        intimation_time: formData.intimationTime,
+        
+        // Incident details
+        incident_details: {
+          incident_date: formData.incidentDate,
+          incident_time: formData.incidentTime,
+          incident_location: formData.incidentLocation,
+          incident_description: formData.incidentDescription
+        },
+        
+        // Claimant information
+        claimant_info: {
+          name: formData.claimantName,
+          phone: formData.claimantPhone,
+          email: formData.claimantEmail,
+          address: formData.claimantAddress,
+          city: formData.claimantCity,
+          pincode: formData.claimantPincode
+        },
+        
+        // Bank details
+        bank_details: {
+          account_holder_name: formData.accountHolderName,
+          account_number: formData.accountNumber,
+          ifsc_code: formData.ifscCode,
+          bank_name: formData.bankName,
+          branch_name: formData.branchName,
+          account_type: formData.accountType
+        },
+        
+        // Type-specific details
+        ...(claimType === 'health' && {
+          hospitalization_details: {
+            claim_category: formData.claimCategory,
+            hospital_name: formData.hospitalName,
+            hospital_address: formData.hospitalAddress,
+            hospital_city: formData.hospitalCity,
+            hospital_type: formData.hospitalType,
+            admission_date: formData.admissionDate,
+            discharge_date: formData.dischargeDate,
+            treatment_type: formData.treatmentType,
+            ailment: formData.ailment,
+            room_type: formData.roomType,
+            doctor_name: formData.doctorName,
+            estimated_amount: formData.estimatedAmount,
+            patient_name: formData.patientName,
+            patient_age: formData.patientAge,
+            patient_gender: formData.patientGender
+          }
+        }),
+        
+        ...(claimType === 'car' && {
+          accident_details: {
+            accident_type: formData.accidentType,
+            vehicle_condition: formData.vehicleCondition,
+            repair_workshop: formData.repairWorkshop,
+            estimated_repair_cost: formData.estimatedRepairCost,
+            police_complaint_filed: formData.policeComplaintFiled,
+            fir_number: formData.firNumber,
+            fir_date: formData.firDate,
+            police_station: formData.policeStation,
+            third_party_involved: formData.thirdPartyInvolved,
+            third_party_details: formData.thirdPartyDetails,
+            driver_name: formData.driverName,
+            driver_license_number: formData.driverLicenseNumber,
+            driver_relation: formData.driverRelation
+          }
+        }),
+        
+        ...(claimType === 'life' && {
+          death_details: {
+            deceased_name: formData.deceasedName,
+            deceased_dob: formData.deceasedDOB,
+            deceased_age: formData.deceasedAge,
+            date_of_death: formData.dateOfDeath,
+            time_of_death: formData.timeOfDeath,
+            place_of_death: formData.placeOfDeath,
+            cause_of_death: formData.causeOfDeath,
+            death_type: formData.deathType,
+            hospital_name: formData.hospitalNameDeath,
+            claimant_relation: formData.claimantRelation
+          }
+        })
+        
+        // Documents will be added after upload (see below)
+      };
+
+      // Step 1: Create claim application first (to get application ID)
+      console.log('[CLAIM_SUBMIT] Creating claim application...');
+      
+      try {
+        const response = await createClaimApplication(payload);
+        applicationId = response?.id;
+
+        if (!applicationId) {
+          throw new Error('Failed to create claim application. No application ID returned.');
+        }
+
+        console.log('[CLAIM_SUBMIT] ✅ Claim application created with ID:', applicationId);
+      } catch (createError: any) {
+        console.error('[CLAIM_SUBMIT] ❌ Failed to create claim application:', createError);
+        throw new Error(`Failed to create claim application: ${createError?.message || 'Unknown error'}`);
+      }
+
+      // Step 2: Upload documents with claimId reference
+      let uploadedDocs: Array<{
+        filename: string;
+        url: string;
+        documentId: number | string | null;
+        docType: string;
+        category: string;
+      }> = [];
+
+      if (uploadedFiles.length > 0) {
+        console.log(`[CLAIM_SUBMIT] Uploading ${uploadedFiles.length} document(s) with claimId: ${applicationId}...`);
+        
+        try {
+          // Upload all files with the claim ID
+          const uploadResults = await uploadAllFiles(applicationId);
+          
+          console.log(`[CLAIM_SUBMIT] Upload results:`, uploadResults);
+          console.log(`[CLAIM_SUBMIT] Total results: ${uploadResults.length}, Expected: ${uploadedFiles.length}`);
+          
+          // Map upload results to document format with better error handling
+          uploadedDocs = uploadResults
+            .filter(result => {
+              if (result === null) {
+                console.warn('[CLAIM_SUBMIT] Filtered out null result');
+                return false;
+              }
+              const hasUrl = !!(result.fileUrl || result.fileurl);
+              if (!hasUrl) {
+                console.warn('[CLAIM_SUBMIT] Filtered out result without fileUrl:', result);
+              }
+              return hasUrl;
+            })
+            .map(result => {
+              // Get category from uploadedFiles state (it's stored there)
+              const fileObj = uploadedFiles.find(f => 
+                f.uploadedUrl === (result.fileUrl || result.fileurl) ||
+                f.documentId === (result.documentId || result.document_id)
+              );
+              
+              const doc = {
+                filename: result.fileName || result.filename || 'unknown',
+                url: result.fileUrl || result.fileurl || '',
+                documentId: result.documentId || result.document_id || null,
+                docType: 'claim_document',
+                category: fileObj?.category || result.category || 'other'  // Use category from fileObj if available
+              };
+              
+              console.log(`[CLAIM_SUBMIT] Mapped document:`, doc);
+              console.log(`[CLAIM_SUBMIT]   Category source: ${fileObj?.category ? 'fileObj' : 'result'}`);
+              
+              return doc;
+            });
+
+          console.log(`[CLAIM_SUBMIT] Successfully uploaded ${uploadedDocs.length}/${uploadedFiles.length} documents`);
+          console.log(`[CLAIM_SUBMIT] Uploaded categories:`, Array.from(new Set(uploadedDocs.map(d => d.category))));
+          console.log(`[CLAIM_SUBMIT] Required document IDs:`, requiredDocs.map(d => d.id));
+          
+          // Validate that all required documents uploaded successfully
+          const uploadedCategories = new Set(uploadedDocs.map(d => d.category));
+          const missingRequiredUploads = requiredDocs.filter(d => !uploadedCategories.has(d.id));
+          
+          if (missingRequiredUploads.length > 0) {
+            // Create detailed error message with upload status
+            const uploadedFileNames = uploadedDocs.map(d => d.filename).filter(Boolean);
+            const missingDocNames = missingRequiredUploads.map(d => d.name);
+            
+            console.error('[CLAIM_SUBMIT] Required documents validation failed');
+            console.error('[CLAIM_SUBMIT] Uploaded categories:', Array.from(uploadedCategories));
+            console.error('[CLAIM_SUBMIT] Required document IDs:', requiredDocs.map(d => d.id));
+            console.error('[CLAIM_SUBMIT] Missing required documents:', missingDocNames);
+            console.error('[CLAIM_SUBMIT] Successfully uploaded files:', uploadedFileNames);
+            console.error('[CLAIM_SUBMIT] Upload status summary:', {
+              totalRequired: requiredDocs.length,
+              uploaded: uploadedDocs.length,
+              missing: missingRequiredUploads.length,
+              uploadedCategories: Array.from(uploadedCategories),
+              requiredCategories: requiredDocs.map(d => d.id)
+            });
+            
+            // Show detailed error with upload status
+            const errorMessage = `Required documents missing or failed to upload:\n\n` +
+              `Missing: ${missingDocNames.join(', ')}\n\n` +
+              `Uploaded: ${uploadedFileNames.length} file(s)\n` +
+              `Please ensure all required documents are uploaded before submitting.`;
+            
+            toast.error(errorMessage, { duration: 8000 });
+            setIsSubmitting(false);
+            return; // Stop submission if required documents failed
+          }
+        } catch (uploadError: any) {
+          console.error('[CLAIM_SUBMIT] Document upload failed:', uploadError);
+          toast.error('Document upload failed. Please try again.');
+          setIsSubmitting(false);
+          return; // Stop submission on upload failure
+        }
+      } else {
+        // No files to upload, but check if required documents were expected
+        if (requiredDocs.length > 0) {
+          toast.warning('No documents selected for upload, but some documents may be required. Continuing with claim submission.');
+        }
+      }
+
+      // Step 3: Update claim application with document URLs
+      if (uploadedDocs.length > 0) {
+        console.log('[CLAIM_SUBMIT] Updating claim application with document URLs...');
+        console.log('[CLAIM_SUBMIT] Documents to save:', uploadedDocs.map(d => ({
+          filename: d.filename,
+          url: d.url.substring(0, 100) + '...',
+          documentId: d.documentId,
+          docType: d.docType,
+          category: d.category
+        })));
+        
+        // Verify all documents have required fields
+        const documentsWithMissingFields = uploadedDocs.filter(doc => 
+          !doc.filename || !doc.url || !doc.docType || !doc.category
+        );
+        
+        if (documentsWithMissingFields.length > 0) {
+          console.warn('[CLAIM_SUBMIT] ⚠️  Some documents missing required fields:', documentsWithMissingFields);
+        }
+        
+        // Verify URLs are Azure Blob Storage URLs
+        const nonAzureUrls = uploadedDocs.filter(doc => 
+          doc.url && !doc.url.includes('blob.core.windows.net')
+        );
+        
+        if (nonAzureUrls.length > 0) {
+          console.warn('[CLAIM_SUBMIT] ⚠️  Some documents do not have Azure URLs:', nonAzureUrls.map(d => d.filename));
+        } else {
+          console.log('[CLAIM_SUBMIT] ✅ All documents have Azure Blob Storage URLs');
+        }
+        
+        try {
+          const updatePayload = {
+            documents: uploadedDocs,
+            status: 'submitted' // Ensure status is set
+          };
+          
+          console.log('[CLAIM_SUBMIT] Sending update payload to MongoDB...');
+          const updateResponse = await updateClaimApplication(applicationId, updatePayload);
+          
+          console.log('[CLAIM_SUBMIT] ✅ Claim application updated with documents');
+          console.log('[CLAIM_SUBMIT] Update response:', updateResponse);
+          console.log(`[CLAIM_SUBMIT] Saved ${uploadedDocs.length} document(s) to MongoDB`);
+          
+          // Log each document that was saved
+          uploadedDocs.forEach((doc, idx) => {
+            console.log(`[CLAIM_SUBMIT] Document ${idx + 1} saved:`, {
+              filename: doc.filename,
+              url: doc.url.substring(0, 80) + '...',
+              documentId: doc.documentId,
+              category: doc.category,
+              isAzureUrl: doc.url.includes('blob.core.windows.net')
+            });
+          });
+          
+        } catch (updateError: any) {
+          console.error('[CLAIM_SUBMIT] ❌ Failed to update claim application with documents:', updateError);
+          console.error('[CLAIM_SUBMIT] Error details:', {
+            message: updateError?.message,
+            status: updateError?.response?.status,
+            data: updateError?.response?.data
+          });
+          // Non-critical error - documents are uploaded, just metadata update failed
+          toast.warning('Claim submitted, but document metadata update failed. Documents are uploaded.');
+        }
+      } else {
+        console.warn('[CLAIM_SUBMIT] ⚠️  No documents to save to MongoDB');
+      }
+
+      // Step 4: Show success and move to confirmation
+      console.log('[CLAIM_SUBMIT] ✅ Claim submission successful, moving to step 8');
+      console.log('[CLAIM_SUBMIT] Application ID:', applicationId);
+      console.log('[CLAIM_SUBMIT] Claim Type:', claimType);
+      console.log('[CLAIM_SUBMIT] Selected Policy:', selectedPolicy);
+      
+      // Set claim number before navigating to step 8
+      setClaimNumber(applicationId); // Use application ID as claim number
+      
+      // Ensure step 8 is reached - use setTimeout to ensure state updates are applied
+      setTimeout(() => {
+        console.log('[CLAIM_SUBMIT] Setting step to 8');
+        setStep(8); // Confirmation step
+        toast.success('Claim submitted successfully! Your claim is submitted and is in process.');
+      }, 100);
+      
+    } catch (error: any) {
+      console.error('[CLAIM_SUBMIT] ❌ Error submitting claim:', error);
+      console.error('[CLAIM_SUBMIT] Error details:', {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name
+      });
+      
+      // Even on error, if we have an applicationId, show success page
+      // This handles cases where claim was created but something else failed
+      if (applicationId) {
+        console.log('[CLAIM_SUBMIT] ⚠️  Error occurred but claim was created, showing success page');
+        setClaimNumber(applicationId);
+        setTimeout(() => {
+          setStep(8);
+          toast.warning('Claim submitted, but some operations may have failed. Please check your claim status.');
+        }, 100);
+      } else {
+        toast.error(error?.message || 'Failed to submit claim. Please try again.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const selectedPolicy = claimType ? mockPolicies[claimType].find(p => p.id === formData.selectedPolicy) : null;
+  // Get selected policy from real policies for display
+  const filteredPolicies = claimType ? getPoliciesByType(claimType) : [];
+  const selectedPolicyObj = filteredPolicies.find(p => 
+    String(p.id || p.policyId) === String(formData.selectedPolicy)
+  );
+  const selectedPolicy = selectedPolicyObj ? mapPolicyToUI(selectedPolicyObj) : null;
 
   return (
     <div className="pt-[70px] min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50">
@@ -404,6 +1317,20 @@ export default function ClaimsSubmit() {
                     <CardDescription>Choose the type of insurance claim you want to file</CardDescription>
                   </CardHeader>
                   <CardContent>
+                    {loadingPolicies && !claimType && (
+                      <div className="text-center py-4 mb-4">
+                        <Loader2 className="w-5 h-5 animate-spin mx-auto text-blue-600 mb-2" />
+                        <p className="text-xs text-muted-foreground">Loading your policies...</p>
+                      </div>
+                    )}
+                    {policiesError && !claimType && (
+                      <Alert variant="destructive" className="mb-4">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription className="text-sm">
+                          {policiesError}
+                        </AlertDescription>
+                      </Alert>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       {[
                         { type: 'health', icon: Heart, label: 'Health Insurance', color: 'blue', desc: 'Hospitalization & medical expenses' },
@@ -416,10 +1343,12 @@ export default function ClaimsSubmit() {
                             key={item.type}
                             className={`cursor-pointer transition-all hover:shadow-xl ${
                               claimType === item.type ? 'ring-2 ring-blue-600 bg-blue-50' : ''
-                            }`}
+                            } ${loadingPolicies ? 'opacity-75 cursor-wait' : ''}`}
                             onClick={() => {
-                              setClaimType(item.type as any);
-                              setFormData({...formData, selectedPolicy: ''});
+                              if (!loadingPolicies) {
+                                setClaimType(item.type as any);
+                                setFormData({...formData, selectedPolicy: ''});
+                              }
                             }}
                           >
                             <CardContent className="p-6 text-center">
@@ -450,39 +1379,88 @@ export default function ClaimsSubmit() {
                         <CardDescription>Choose the policy for which you want to file a claim</CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        {mockPolicies[claimType].map((policy) => (
-                          <Card
-                            key={policy.id}
-                            className={`cursor-pointer transition-all hover:shadow-lg ${
-                              formData.selectedPolicy === policy.id ? 'ring-2 ring-blue-600 bg-blue-50' : ''
-                            }`}
-                            onClick={() => setFormData({...formData, selectedPolicy: policy.id})}
-                          >
-                            <CardContent className="p-4">
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <h4 className="font-semibold">{policy.name}</h4>
-                                    {formData.selectedPolicy === policy.id && (
-                                      <Check className="w-5 h-5 text-blue-600" />
-                                    )}
+                        {loadingPolicies ? (
+                          <div className="text-center py-8">
+                            <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-600 mb-2" />
+                            <p className="text-sm text-muted-foreground">Loading policies...</p>
+                          </div>
+                        ) : policiesError ? (
+                          <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>
+                              {policiesError}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="mt-2"
+                                onClick={async () => {
+                                  const userId = user?.id || localStorage.getItem('userId');
+                                  if (userId) {
+                                    try {
+                                      setLoadingPolicies(true);
+                                      setPoliciesError(null);
+                                      const policiesData = await getUserPolicies(userId);
+                                      const policiesArray = Array.isArray(policiesData) ? policiesData : [];
+                                      setPolicies(policiesArray);
+                                    } catch (error: any) {
+                                      setPoliciesError(error?.message || 'Failed to load policies');
+                                      toast.error('Failed to load policies');
+                                    } finally {
+                                      setLoadingPolicies(false);
+                                    }
+                                  }
+                                }}
+                              >
+                                Retry
+                              </Button>
+                            </AlertDescription>
+                          </Alert>
+                        ) : getPoliciesByType(claimType).length === 0 ? (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <p className="text-lg mb-2">No policies available</p>
+                            <p className="text-sm">No {claimType} policies found for your account.</p>
+                            <p className="text-sm mt-2">Please purchase a policy or contact support.</p>
+                          </div>
+                        ) : (
+                          getPoliciesByType(claimType).map((policy) => {
+                            const uiPolicy = mapPolicyToUI(policy);
+                            const policyId = String(policy.id || policy.policyId || '');
+                            
+                            return (
+                              <Card
+                                key={policyId}
+                                className={`cursor-pointer transition-all hover:shadow-lg ${
+                                  formData.selectedPolicy === policyId ? 'ring-2 ring-blue-600 bg-blue-50' : ''
+                                }`}
+                                onClick={() => setFormData({...formData, selectedPolicy: policyId})}
+                              >
+                                <CardContent className="p-4">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <h4 className="font-semibold">{uiPolicy.name}</h4>
+                                        {formData.selectedPolicy === policyId && (
+                                          <Check className="w-5 h-5 text-blue-600" />
+                                        )}
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                                        <p>Policy: {uiPolicy.policyNumber}</p>
+                                        <p>Sum Insured: {uiPolicy.sumInsured}</p>
+                                        {uiPolicy.vehicle && (
+                                          <p>Vehicle: {uiPolicy.vehicle}</p>
+                                        )}
+                                        <p>Insurer: {uiPolicy.insurer}</p>
+                                      </div>
+                                      <Badge variant="secondary" className="mt-2">
+                                        Valid till: {uiPolicy.expiryDate}
+                                      </Badge>
+                                    </div>
                                   </div>
-                                  <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                                    <p>Policy: {policy.policyNumber}</p>
-                                    <p>Sum Insured: {policy.sumInsured}</p>
-                                    {(policy as any).vehicle && (
-                                      <p>Vehicle: {(policy as any).vehicle}</p>
-                                    )}
-                                    <p>Insurer: {policy.insurer}</p>
-                                  </div>
-                                  <Badge variant="secondary" className="mt-2">
-                                    Valid till: {new Date(policy.expiryDate).toLocaleDateString('en-IN')}
-                                  </Badge>
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
+                                </CardContent>
+                              </Card>
+                            );
+                          })
+                        )}
                       </CardContent>
                     </Card>
                   </motion.div>
@@ -1057,30 +2035,147 @@ export default function ClaimsSubmit() {
 
                             {/* Uploaded Files Preview */}
                             {uploaded.length > 0 && (
-                              <div className="mt-3 space-y-2">
-                                {uploaded.map((file) => (
-                                  <div key={file.id} className="flex items-center justify-between bg-gray-50 p-2 rounded">
-                                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                                      {file.preview ? (
-                                        <img src={file.preview} alt={file.name} className="w-10 h-10 object-cover rounded" />
-                                      ) : (
-                                        <FileText className="w-10 h-10 text-gray-400" />
-                                      )}
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium truncate">{file.name}</p>
-                                        <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+                              <div className="mt-3 space-y-3">
+                                {uploaded.map((file) => {
+                                  // Find the file in uploadedFiles array to get upload status
+                                  const fileObj = uploadedFiles.find(f => f.id === file.id);
+                                  if (!fileObj) return null;
+
+                                  // Determine status and styling based on file state
+                                  const isUploading = fileObj.uploading || false;
+                                  const isSuccess = fileObj.uploadedUrl && !fileObj.error;
+                                  const isError = fileObj.error && !fileObj.uploading;
+                                  const isPending = !isUploading && !isSuccess && !isError;
+                                  
+                                  // Dynamic styling based on status
+                                  const bgColor = isError 
+                                    ? 'bg-red-50 border-red-200' 
+                                    : isSuccess 
+                                    ? 'bg-green-50 border-green-200' 
+                                    : isUploading
+                                    ? 'bg-blue-50 border-blue-200'
+                                    : 'bg-gray-50 border-gray-200';
+                                  
+                                  const iconColor = isError 
+                                    ? 'text-red-600' 
+                                    : isSuccess 
+                                    ? 'text-green-600' 
+                                    : isUploading
+                                    ? 'text-blue-600'
+                                    : 'text-gray-400';
+                                  
+                                  const progressColor = isError 
+                                    ? 'bg-red-500' 
+                                    : isSuccess 
+                                    ? 'bg-green-500' 
+                                    : 'bg-blue-500';
+
+                                  const progress = fileObj.progress || 0;
+
+                                  return (
+                                    <div key={file.id} className={`flex items-start gap-3 p-3 border rounded-lg ${bgColor} transition-colors`}>
+                                      {/* Status Icon */}
+                                      <div className={iconColor} style={{ marginTop: '2px' }}>
+                                        {isUploading ? (
+                                          <Loader2 className="w-5 h-5 animate-spin" />
+                                        ) : isSuccess ? (
+                                          <CheckCircle className="w-5 h-5" />
+                                        ) : isError ? (
+                                          <AlertCircle className="w-5 h-5" />
+                                        ) : (
+                                          <FileCheck className="w-5 h-5" />
+                                        )}
                                       </div>
+                                      
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-2 mb-2">
+                                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                                            {file.preview ? (
+                                              <img src={file.preview} alt={file.name} className="w-10 h-10 object-cover rounded" />
+                                            ) : (
+                                              <FileText className="w-10 h-10 text-gray-400 flex-shrink-0" />
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                              <p className="text-sm font-medium truncate" title={file.name}>
+                                                {file.name}
+                                              </p>
+                                              <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            {!isUploading && (
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => removeFile(file.id)}
+                                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                title="Remove file"
+                                              >
+                                                <Trash2 className="w-4 h-4" />
+                                              </Button>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {/* Progress Bar - Show if uploading or has progress */}
+                                        {(isUploading || isSuccess || isError) && (
+                                          <div className="mt-2">
+                                            <div className="w-full bg-gray-200 h-2 rounded overflow-hidden">
+                                              <div 
+                                                className={`h-2 transition-all duration-300 ${progressColor}`} 
+                                                style={{ width: `${progress}%` }} 
+                                              />
+                                            </div>
+                                            <div className="flex items-center justify-between text-xs mt-1">
+                                              <span className={isError ? 'text-red-600' : isSuccess ? 'text-green-600' : 'text-blue-600'}>
+                                                {isUploading ? `📤 Uploading to Azure... ${progress}%` : isSuccess ? '✅ Uploaded to Azure' : isError ? '❌ Upload failed' : '📄 Ready'}
+                                              </span>
+                                              {fileObj.error && (
+                                                <span className="text-red-600 font-medium truncate ml-2" title={fileObj.error}>
+                                                  {fileObj.error}
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {/* Status text - Show for all states */}
+                                        <p className={`text-xs mt-1 ${
+                                          isUploading ? 'text-blue-600 font-medium' : 
+                                          isSuccess ? 'text-green-600 font-medium' : 
+                                          isError ? 'text-red-600 font-medium' : 
+                                          'text-gray-500'
+                                        }`}>
+                                          {isUploading ? `📤 Uploading to Azure... ${progress}%` : 
+                                           isSuccess ? '✅ Uploaded to Azure successfully' : 
+                                           isError ? `❌ Upload failed: ${fileObj.error}` : 
+                                           '📄 Ready to upload'}
+                                        </p>
+                                      </div>
+                                      
+                                      {/* Action Button - Show retry for errors */}
+                                      {isError && (
+                                        <div className="flex flex-col gap-2">
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={async () => {
+                                              const idx = uploadedFiles.findIndex(f => f.id === file.id);
+                                              if (idx !== -1) {
+                                                await uploadFileAtIndex(idx);
+                                              }
+                                            }}
+                                            className="text-xs h-8"
+                                          >
+                                            Retry
+                                          </Button>
+                                        </div>
+                                      )}
                                     </div>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => removeFile(file.id)}
-                                    >
-                                      <X className="w-4 h-4 text-red-500" />
-                                    </Button>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             )}
                           </div>
@@ -1474,17 +2569,29 @@ export default function ClaimsSubmit() {
             {/* Step 8: Confirmation */}
             {step === 8 && (
               <div className="max-w-3xl mx-auto">
-                <motion.div
-                  initial={{ scale: 0.9, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="text-center mb-8"
-                >
-                  <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <CheckCircle className="w-16 h-16 text-white" />
-                  </div>
-                  <h1 className="text-4xl mb-3">Claim Submitted Successfully!</h1>
-                  <p className="text-xl text-muted-foreground">Your claim has been registered and is being processed</p>
-                </motion.div>
+                {(() => {
+                  // Log for debugging
+                  console.log('[CLAIM_SUCCESS_PAGE] Rendering step 8 success page');
+                  console.log('[CLAIM_SUCCESS_PAGE] Claim Number:', claimNumber);
+                  console.log('[CLAIM_SUCCESS_PAGE] Claim Type:', claimType);
+                  console.log('[CLAIM_SUCCESS_PAGE] Selected Policy:', selectedPolicy);
+                  
+                  return (
+                    <motion.div
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className="text-center mb-8"
+                    >
+                      <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <CheckCircle className="w-16 h-16 text-white" />
+                      </div>
+                      <h1 className="text-4xl mb-3">Claim Submitted Successfully!</h1>
+                      <p className="text-xl text-muted-foreground">
+                        Your claim is submitted and is in process
+                      </p>
+                    </motion.div>
+                  );
+                })()}
 
                 <Card className="mb-6">
                   <CardHeader className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-t-lg">
@@ -1495,15 +2602,21 @@ export default function ClaimsSubmit() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
                         <Label className="text-muted-foreground">Claim Number</Label>
-                        <p className="text-2xl font-bold text-blue-600">{claimNumber}</p>
+                        <p className="text-2xl font-bold text-blue-600">
+                          {claimNumber || 'Processing...'}
+                        </p>
                       </div>
                       <div>
                         <Label className="text-muted-foreground">Claim Type</Label>
-                        <p className="text-xl font-semibold capitalize">{claimType} Insurance</p>
+                        <p className="text-xl font-semibold capitalize">
+                          {claimType ? `${claimType} Insurance` : 'N/A'}
+                        </p>
                       </div>
                       <div>
                         <Label className="text-muted-foreground">Policy Number</Label>
-                        <p className="font-semibold">{selectedPolicy?.policyNumber}</p>
+                        <p className="font-semibold">
+                          {selectedPolicy?.policyNumber || formData.selectedPolicy || 'N/A'}
+                        </p>
                       </div>
                       <div>
                         <Label className="text-muted-foreground">Submission Date</Label>
@@ -1515,7 +2628,9 @@ export default function ClaimsSubmit() {
                       </div>
                       <div>
                         <Label className="text-muted-foreground">Contact</Label>
-                        <p className="font-semibold">{formData.claimantPhone}</p>
+                        <p className="font-semibold">
+                          {formData.claimantPhone || formData.claimantEmail || 'N/A'}
+                        </p>
                       </div>
                     </div>
 
@@ -1617,10 +2732,20 @@ export default function ClaimsSubmit() {
             ) : (
               <Button
                 onClick={handleSubmit}
+                disabled={isSubmitting}
                 className="ml-auto bg-gradient-to-r from-green-500 to-green-600 hover:opacity-90"
               >
-                Submit Claim
-                <CheckCircle className="w-4 h-4 ml-2" />
+                {isSubmitting ? (
+                  <>
+                    Submitting...
+                    <Clock className="w-4 h-4 ml-2 animate-spin" />
+                  </>
+                ) : (
+                  <>
+                    Submit Claim
+                    <CheckCircle className="w-4 h-4 ml-2" />
+                  </>
+                )}
               </Button>
             )}
           </div>

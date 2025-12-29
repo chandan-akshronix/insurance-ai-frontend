@@ -6,12 +6,13 @@ import { Progress } from '../ui/progress';
 import { Badge } from '../ui/badge';
 import { Link } from 'react-router-dom';
 import { getUserPolicies, getUserActivities, getNotifications } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
-// Icon mapping for policy types
+// Icon mapping for policy types (using backend enum values)
 const typeIconMap: { [key: string]: any } = {
-  'Life Insurance': Heart,
-  'Car Insurance': Car,
-  'Health Insurance': Activity
+  'life_insurance': Heart,
+  'vehicle_insurance': Car,
+  'health_insurance': Activity
 };
 
 // Icon mapping for activity types
@@ -22,14 +23,59 @@ const activityIconMap: { [key: string]: any } = {
   'health': Activity
 };
 
-// Color mapping for policy types
+// Color mapping for policy types (using backend enum values)
 const typeColorMap: { [key: string]: string } = {
-  'Life Insurance': 'bg-blue-500',
-  'Car Insurance': 'bg-green-500',
-  'Health Insurance': 'bg-red-500'
+  'life_insurance': 'bg-blue-500',
+  'vehicle_insurance': 'bg-green-500',
+  'health_insurance': 'bg-red-500'
+};
+
+// Helper function to convert backend enum to display name
+const getPolicyTypeDisplayName = (type: string): string => {
+  const typeMap: { [key: string]: string } = {
+    'life_insurance': 'Life Insurance',
+    'vehicle_insurance': 'Car Insurance',
+    'health_insurance': 'Health Insurance'
+  };
+  return typeMap[type] || type;
+};
+
+// Helper function to format coverage (handles both number and string)
+const formatCoverage = (value: number | string): string => {
+  if (typeof value === 'number') {
+    return `₹${value.toLocaleString('en-IN')}`;
+  }
+  // If already a string, return as is
+  return value;
+};
+
+// Helper function to parse coverage to number (handles both number and string)
+const parseCoverage = (value: number | string): number => {
+  if (typeof value === 'number') return value;
+  // Parse string value, remove currency symbols and commas
+  const parsed = parseFloat(value.toString().replace(/[₹,]/g, '')) || 0;
+  return parsed;
+};
+
+// Helper function to format premium (handles both number and string)
+const formatPremium = (value: number | string): string => {
+  if (typeof value === 'number') {
+    return `₹${value.toLocaleString('en-IN')}/month`;
+  }
+  // If already a string, return as is
+  return value;
+};
+
+// Helper function to parse premium to number (handles both number and string)
+const parsePremium = (value: number | string): number => {
+  if (typeof value === 'number') return value;
+  // Parse string value, remove currency symbols, commas, and /month
+  const parsed = parseFloat(value.toString().replace(/[₹,/month]/g, '')) || 0;
+  return parsed;
 };
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const [expandedPolicy, setExpandedPolicy] = useState<number | null>(null);
   const [policies, setPolicies] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
@@ -39,20 +85,59 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // Get userId from AuthContext (more reliable than localStorage)
+        const userId = user?.id || localStorage.getItem('userId') || '1';
+        
+        console.log('🔍 [DASHBOARD] Starting to fetch data');
+        console.log('🔍 [DASHBOARD] AuthContext user:', user);
+        console.log('🔍 [DASHBOARD] User ID from AuthContext:', user?.id);
+        console.log('🔍 [DASHBOARD] localStorage userId:', localStorage.getItem('userId'));
+        console.log('🔍 [DASHBOARD] localStorage user:', localStorage.getItem('user'));
+        console.log('🔍 [DASHBOARD] Using userId:', userId);
+        
+        // Verify userId exists
+        if (!userId || userId === '1') {
+          console.warn('⚠️ [DASHBOARD] WARNING: Using default userId "1" - this may not match logged-in user');
+          console.warn('⚠️ [DASHBOARD] User object:', user);
+          console.warn('⚠️ [DASHBOARD] localStorage userId:', localStorage.getItem('userId'));
+        }
+        
         setLoading(true);
         const [policiesData, activitiesData, notificationsData] = await Promise.all([
-          getUserPolicies(),
-          getUserActivities(),
-          getNotifications()
+          getUserPolicies(userId),
+          getUserActivities(userId),
+          getNotifications(userId)
         ]);
 
-        setPolicies(policiesData.policies || []);
-        setActivities(activitiesData.activities || []);
-        setNotifications(notificationsData.notifications || []);
+        console.log('✅ [DASHBOARD] All API calls completed');
+        console.log('✅ [DASHBOARD] Policies data:', policiesData);
+        console.log('✅ [DASHBOARD] Policies data type:', typeof policiesData);
+        console.log('✅ [DASHBOARD] Is policies array:', Array.isArray(policiesData));
+
+        // Handle array response directly (backend returns array, not object with policies property)
+        const policiesArray = Array.isArray(policiesData) ? policiesData : [];
+        console.log('✅ [DASHBOARD] Policies array length:', policiesArray.length);
+        console.log('✅ [DASHBOARD] Setting policies:', policiesArray);
+        
+        if (policiesArray.length > 0) {
+          console.log('✅ [DASHBOARD] First policy sample:', policiesArray[0]);
+        } else {
+          console.warn('⚠️ [DASHBOARD] No policies found - array is empty');
+        }
+        
+        setPolicies(policiesArray);
+        setActivities(Array.isArray(activitiesData) ? activitiesData : (activitiesData?.activities || []));
+        setNotifications(Array.isArray(notificationsData) ? notificationsData : (notificationsData?.notifications || []));
       } catch (error) {
-        console.error('Error fetching dashboard data:', error);
+        console.error('❌ [DASHBOARD] Error fetching dashboard data:', error);
+        console.error('❌ [DASHBOARD] Error details:', JSON.stringify(error, null, 2));
+        if (error instanceof Error) {
+          console.error('❌ [DASHBOARD] Error message:', error.message);
+          console.error('❌ [DASHBOARD] Error stack:', error.stack);
+        }
       } finally {
         setLoading(false);
+        console.log('✅ [DASHBOARD] Loading completed');
       }
     };
 
@@ -60,13 +145,11 @@ export default function Dashboard() {
   }, []);
 
   const totalCoverage = policies.reduce((sum, policy) => {
-    const value = parseInt(policy.coverage.replace(/[₹,]/g, ''));
-    return sum + value;
+    return sum + parseCoverage(policy.coverage);
   }, 0);
 
   const monthlyPremium = policies.reduce((sum, policy) => {
-    const value = parseInt(policy.premium.replace(/[₹,/month]/g, ''));
-    return sum + value;
+    return sum + parsePremium(policy.premium);
   }, 0);
 
   if (loading) {
@@ -132,13 +215,19 @@ export default function Dashboard() {
                 <CardTitle>My Policies</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {policies.map((policy, index) => {
+                {policies.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <p className="text-lg mb-2">No policies found</p>
+                    <p className="text-sm">Start by purchasing a new policy.</p>
+                  </div>
+                ) : (
+                  policies.map((policy, index) => {
                   const PolicyIcon = typeIconMap[policy.type] || FileText;
                   const policyColor = typeColorMap[policy.type] || 'bg-blue-500';
                   
                   return (
                     <div
-                      key={policy.id}
+                      key={policy.policyId || policy.id}
                       className="border rounded-lg overflow-hidden hover:shadow-md transition-shadow"
                     >
                       <div
@@ -154,7 +243,7 @@ export default function Dashboard() {
                             </div>
                             <div className="flex-1">
                               <div className="flex items-center gap-3 mb-2">
-                                <h4>{policy.type}</h4>
+                                <h4>{getPolicyTypeDisplayName(policy.type)}</h4>
                                 <Badge
                                   variant={policy.status === 'Active' ? 'default' : 'destructive'}
                                   className={
@@ -183,19 +272,19 @@ export default function Dashboard() {
                           <div className="grid md:grid-cols-3 gap-4 mb-4">
                             <div>
                               <p className="text-sm text-gray-600 mb-1">Coverage</p>
-                              <p>{policy.coverage}</p>
+                              <p>{formatCoverage(policy.coverage)}</p>
                             </div>
                             <div>
                               <p className="text-sm text-gray-600 mb-1">Premium</p>
-                              <p>{policy.premium}</p>
+                              <p>{formatPremium(policy.premium)}</p>
                             </div>
                             <div>
                               <p className="text-sm text-gray-600 mb-1">Expiry Date</p>
-                              <p>{new Date(policy.expiryDate).toLocaleDateString('en-IN', {
+                              <p>{policy.expiryDate ? new Date(policy.expiryDate).toLocaleDateString('en-IN', {
                                 day: '2-digit',
                                 month: 'short',
                                 year: 'numeric'
-                              })}</p>
+                              }) : 'Not set'}</p>
                             </div>
                           </div>
                           <div className="flex gap-2">
@@ -211,7 +300,8 @@ export default function Dashboard() {
                       )}
                     </div>
                   );
-                })}
+                })
+                )}
               </CardContent>
             </Card>
 

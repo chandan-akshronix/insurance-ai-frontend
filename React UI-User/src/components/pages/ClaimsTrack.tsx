@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Eye, Download, FileText, Clock, CheckCircle, XCircle, AlertCircle, Phone, Mail, MapPin, Calendar, User, ChevronRight, ExternalLink } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -8,6 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { motion } from 'motion/react';
 import { toast } from 'sonner@2.0.3';
+import { useAuth } from '../../contexts/AuthContext';
+import { getUserClaimApplications, getClaimApplicationById } from '../../services/api';
 
 interface ClaimDocument {
   id: string;
@@ -15,6 +17,9 @@ interface ClaimDocument {
   type: string;
   uploadDate: string;
   size: string;
+  category?: string;  // Document category (e.g., "death-certificate", "claim-form")
+  url?: string;       // Document URL
+  documentId?: number | string; // SQL document ID
 }
 
 interface ClaimTimeline {
@@ -45,95 +50,123 @@ interface Claim {
   assignedTo?: string;
 }
 
-// Mock Claims Data
-const mockClaims: Claim[] = [
-  {
-    id: '1',
-    claimNumber: 'CLM2024001',
-    policyNumber: 'HLT/2024/001',
-    type: 'health',
-    status: 'under-review',
-    claimAmount: 125000,
-    submittedDate: '2024-10-01',
-    lastUpdate: '2024-10-12',
-    description: 'Hospitalization for appendectomy surgery',
-    claimantName: 'Rajesh Kumar',
-    claimantPhone: '+91 98765 43210',
-    claimantEmail: 'rajesh.k@email.com',
-    assignedTo: 'Dr. Priya Sharma',
-    documents: [
-      { id: 'd1', name: 'Hospital Bills.pdf', type: 'pdf', uploadDate: '2024-10-01', size: '2.4 MB' },
-      { id: 'd2', name: 'Discharge Summary.pdf', type: 'pdf', uploadDate: '2024-10-01', size: '1.1 MB' },
-      { id: 'd3', name: 'Medical Reports.pdf', type: 'pdf', uploadDate: '2024-10-01', size: '3.2 MB' }
-    ],
-    timeline: [
-      { id: 't1', status: 'Submitted', description: 'Claim submitted successfully', date: '2024-10-01', time: '10:30 AM', completed: true },
-      { id: 't2', status: 'Documents Verified', description: 'All documents verified and accepted', date: '2024-10-03', time: '02:15 PM', completed: true },
-      { id: 't3', status: 'Under Review', description: 'Medical team reviewing the claim', date: '2024-10-05', time: '11:00 AM', completed: true },
-      { id: 't4', status: 'Approval Pending', description: 'Awaiting final approval', date: '', time: '', completed: false },
-      { id: 't5', status: 'Payment Processing', description: 'Claim payment will be processed', date: '', time: '', completed: false }
-    ]
-  },
-  {
-    id: '2',
-    claimNumber: 'CLM2024002',
-    policyNumber: 'CAR/2024/001',
-    type: 'car',
-    status: 'approved',
-    claimAmount: 45000,
-    approvedAmount: 42000,
-    submittedDate: '2024-09-15',
-    lastUpdate: '2024-10-10',
-    description: 'Vehicle damage due to accident',
-    claimantName: 'Anjali Mehta',
-    claimantPhone: '+91 87654 32109',
-    claimantEmail: 'anjali.mehta@email.com',
-    assignedTo: 'Vikram Singh',
-    documents: [
-      { id: 'd4', name: 'Accident Photos.zip', type: 'zip', uploadDate: '2024-09-15', size: '8.7 MB' },
-      { id: 'd5', name: 'FIR Copy.pdf', type: 'pdf', uploadDate: '2024-09-15', size: '0.8 MB' },
-      { id: 'd6', name: 'Repair Estimate.pdf', type: 'pdf', uploadDate: '2024-09-16', size: '1.5 MB' }
-    ],
-    timeline: [
-      { id: 't6', status: 'Submitted', description: 'Claim submitted successfully', date: '2024-09-15', time: '03:45 PM', completed: true },
-      { id: 't7', status: 'Documents Verified', description: 'All documents verified', date: '2024-09-17', time: '10:20 AM', completed: true },
-      { id: 't8', status: 'Survey Completed', description: 'Vehicle inspection completed', date: '2024-09-20', time: '04:30 PM', completed: true },
-      { id: 't9', status: 'Approved', description: 'Claim approved for ₹42,000', date: '2024-10-10', time: '11:15 AM', completed: true },
-      { id: 't10', status: 'Payment Processing', description: 'Payment will be processed in 3-5 days', date: '', time: '', completed: false }
-    ]
-  },
-  {
-    id: '3',
-    claimNumber: 'CLM2024003',
-    policyNumber: 'HLT/2024/002',
-    type: 'health',
-    status: 'settled',
-    claimAmount: 85000,
-    approvedAmount: 85000,
-    submittedDate: '2024-08-20',
-    lastUpdate: '2024-09-05',
-    description: 'Dental treatment and surgery',
-    claimantName: 'Suresh Patel',
-    claimantPhone: '+91 76543 21098',
-    claimantEmail: 'suresh.p@email.com',
-    documents: [
-      { id: 'd7', name: 'Dental Bills.pdf', type: 'pdf', uploadDate: '2024-08-20', size: '1.9 MB' },
-      { id: 'd8', name: 'Treatment Records.pdf', type: 'pdf', uploadDate: '2024-08-20', size: '2.1 MB' }
-    ],
-    timeline: [
-      { id: 't11', status: 'Submitted', description: 'Claim submitted successfully', date: '2024-08-20', time: '09:00 AM', completed: true },
-      { id: 't12', status: 'Documents Verified', description: 'All documents verified', date: '2024-08-22', time: '01:30 PM', completed: true },
-      { id: 't13', status: 'Approved', description: 'Claim approved for full amount', date: '2024-08-28', time: '10:00 AM', completed: true },
-      { id: 't14', status: 'Payment Processed', description: 'Payment transferred to account', date: '2024-09-02', time: '03:00 PM', completed: true },
-      { id: 't15', status: 'Settled', description: 'Claim settled successfully', date: '2024-09-05', time: '12:00 PM', completed: true }
-    ]
+// Helper function to transform MongoDB claim application to Claim interface
+const transformClaimApplication = (app: any): Claim => {
+  const claimAmount = app.estimated_amount || app.hospitalization_details?.estimated_amount || 
+                      app.accident_details?.estimated_repair_cost || 
+                      app.death_details?.amount || 0;
+  
+  const submittedDate = app.created_at ? new Date(app.created_at).toISOString().split('T')[0] : 
+                        new Date().toISOString().split('T')[0];
+  const lastUpdate = app.updated_at ? new Date(app.updated_at).toISOString().split('T')[0] : 
+                     submittedDate;
+  
+  // Get description from incident or type-specific details
+  const description = app.incident_details?.incident_description || 
+                     app.hospitalization_details?.ailment ||
+                     app.accident_details?.accident_type ||
+                     app.death_details?.cause_of_death ||
+                     `${app.claim_type} claim`;
+  
+  // Transform documents - extract from MongoDB structure
+  // Handles both old structure (without category) and new structure (with category)
+  const documents: ClaimDocument[] = (app.documents || []).map((doc: any, idx: number) => {
+    // MongoDB stores: {filename, url, documentId, docType, category}
+    // Map to UI structure: {id, name, type, uploadDate, size, category, url, documentId}
+    // Backward compatible: handles documents without category field
+    const category = doc.category || undefined;
+    
+    // Log for debugging backward compatibility
+    if (!category && doc.url) {
+      console.debug(`[CLAIMS_TRACK] Document ${idx + 1} has no category (backward compatible):`, doc.filename || doc.name);
+    }
+    
+    return {
+      id: doc.documentId?.toString() || doc.id || `d${idx}`,
+      name: doc.filename || doc.name || 'Document',
+      type: doc.docType || doc.type || 'pdf',
+      uploadDate: doc.uploadDate || doc.upload_date || submittedDate,
+      size: doc.size || doc.fileSize || 'N/A',
+      category: category,  // Document category for folder organization (optional for backward compatibility)
+      url: doc.url || doc.documentUrl || undefined,  // Document URL (works for both old and new structure)
+      documentId: doc.documentId || doc.id || undefined  // SQL document ID
+    };
+  });
+  
+  // Create basic timeline from status
+  const timeline: ClaimTimeline[] = [
+    {
+      id: 't1',
+      status: 'Submitted',
+      description: 'Claim submitted successfully',
+      date: submittedDate,
+      time: new Date(app.created_at || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      completed: true
+    }
+  ];
+  
+  // Add timeline based on status
+  if (app.status === 'approved' || app.status === 'settled') {
+    timeline.push({
+      id: 't2',
+      status: 'Documents Verified',
+      description: 'All documents verified',
+      date: submittedDate,
+      time: '',
+      completed: true
+    });
+    timeline.push({
+      id: 't3',
+      status: 'Approved',
+      description: app.status === 'settled' ? 'Claim settled successfully' : 'Claim approved',
+      date: lastUpdate,
+      time: '',
+      completed: true
+    });
+  } else if (app.status === 'under-review' || app.status === 'submitted') {
+    timeline.push({
+      id: 't2',
+      status: 'Under Review',
+      description: 'Documents under review',
+      date: '',
+      time: '',
+      completed: false
+    });
   }
-];
+  
+  return {
+    id: app._id || app.id || '',
+    claimNumber: `CLM${app.claim_type?.toUpperCase() || 'CLM'}${app._id?.substring(0, 8) || Date.now()}`,
+    policyNumber: app.policy_id?.toString() || app.policy_number || 'N/A',
+    type: (app.claim_type === 'health' ? 'health' : 
+           app.claim_type === 'car' ? 'car' : 
+           app.claim_type === 'life' ? 'life' : 'health') as 'health' | 'life' | 'car',
+    status: (app.status === 'submitted' ? 'submitted' :
+             app.status === 'approved' ? 'approved' :
+             app.status === 'rejected' ? 'rejected' :
+             app.status === 'settled' ? 'settled' :
+             'under-review') as 'submitted' | 'under-review' | 'approved' | 'rejected' | 'settled',
+    claimAmount: typeof claimAmount === 'string' ? parseFloat(claimAmount.replace(/[₹,]/g, '')) || 0 : (claimAmount || 0),
+    approvedAmount: app.approved_amount || undefined,
+    submittedDate,
+    lastUpdate,
+    description,
+    documents,
+    timeline,
+    claimantName: app.claimant_info?.name || 'N/A',
+    claimantPhone: app.claimant_info?.phone || 'N/A',
+    claimantEmail: app.claimant_info?.email || 'N/A',
+    assignedTo: app.assigned_to || undefined
+  };
+};
 
 export default function ClaimsTrack() {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClaim, setSelectedClaim] = useState<Claim | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [claims, setClaims] = useState<Claim[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -166,18 +199,69 @@ export default function ClaimsTrack() {
     }
   };
 
-  const handleSearch = () => {
+  // Fetch claims on component mount
+  useEffect(() => {
+    const fetchClaims = async () => {
+      try {
+        setLoading(true);
+        const userId = user?.id || localStorage.getItem('userId');
+        
+        if (!userId) {
+          console.warn('No user ID available');
+          setClaims([]);
+          return;
+        }
+
+        const applications = await getUserClaimApplications(userId);
+        
+        // Transform MongoDB applications to Claim interface
+        const transformedClaims = (Array.isArray(applications) ? applications : []).map(transformClaimApplication);
+        setClaims(transformedClaims);
+      } catch (error: any) {
+        console.error('Error fetching claims:', error);
+        toast.error('Failed to load claims. Please try again.');
+        setClaims([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchClaims();
+  }, [user]);
+
+  const handleSearch = async () => {
     if (!searchQuery) {
       toast.error('Please enter a claim number');
       return;
     }
-    const claim = mockClaims.find(c => c.claimNumber.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    // Search in current claims
+    const claim = claims.find(c => 
+      c.claimNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.policyNumber.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    
     if (claim) {
       setSelectedClaim(claim);
       setShowDetails(true);
       toast.success('Claim found!');
     } else {
-      toast.error('Claim not found. Please check the claim number.');
+      // Try to fetch by ID if search by claim number fails
+      try {
+        // Extract ID from search query if it looks like an application ID
+        const appId = searchQuery.trim();
+        const application = await getClaimApplicationById(appId);
+        if (application) {
+          const transformedClaim = transformClaimApplication(application);
+          setSelectedClaim(transformedClaim);
+          setShowDetails(true);
+          toast.success('Claim found!');
+        } else {
+          toast.error('Claim not found. Please check the claim number.');
+        }
+      } catch (error) {
+        toast.error('Claim not found. Please check the claim number.');
+      }
     }
   };
 
@@ -187,11 +271,22 @@ export default function ClaimsTrack() {
   };
 
   const filteredClaims = searchQuery
-    ? mockClaims.filter(claim => 
+    ? claims.filter(claim => 
         claim.claimNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
         claim.policyNumber.toLowerCase().includes(searchQuery.toLowerCase())
       )
-    : mockClaims;
+    : claims;
+
+  if (loading) {
+    return (
+      <div className="pt-[70px] min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50 flex items-center justify-center">
+        <div className="text-center">
+          <Clock className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-gray-600">Loading claims...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pt-[70px] min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50">
@@ -233,13 +328,32 @@ export default function ClaimsTrack() {
         {/* Claims List */}
         <Tabs defaultValue="all" className="mb-8">
           <TabsList className="mb-6">
-            <TabsTrigger value="all">All Claims</TabsTrigger>
-            <TabsTrigger value="pending">Pending</TabsTrigger>
-            <TabsTrigger value="approved">Approved</TabsTrigger>
-            <TabsTrigger value="settled">Settled</TabsTrigger>
+            <TabsTrigger value="all">All Claims ({claims.length})</TabsTrigger>
+            <TabsTrigger value="pending">Pending ({claims.filter(c => c.status === 'submitted' || c.status === 'under-review').length})</TabsTrigger>
+            <TabsTrigger value="approved">Approved ({claims.filter(c => c.status === 'approved').length})</TabsTrigger>
+            <TabsTrigger value="settled">Settled ({claims.filter(c => c.status === 'settled').length})</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="all" className="space-y-4">
+          {filteredClaims.length === 0 ? (
+            <Card className="py-12">
+              <CardContent className="text-center">
+                <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold mb-2">No Claims Found</h3>
+                <p className="text-gray-600 mb-4">
+                  {searchQuery 
+                    ? 'No claims match your search. Please try a different search term.'
+                    : "You haven't submitted any claims yet. Submit your first claim to track it here."}
+                </p>
+                {!searchQuery && (
+                  <Button onClick={() => window.location.href = '/claims/submit'}>
+                    Submit a Claim
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <TabsContent value="all" className="space-y-4">
             {filteredClaims.map((claim) => (
               <motion.div
                 key={claim.id}
@@ -355,6 +469,8 @@ export default function ClaimsTrack() {
               </Card>
             ))}
           </TabsContent>
+            </>
+          )}
         </Tabs>
 
         {/* Help Section */}
@@ -497,16 +613,44 @@ export default function ClaimsTrack() {
                                 <p className="font-medium">{doc.name}</p>
                                 <p className="text-sm text-muted-foreground">
                                   Uploaded on {doc.uploadDate} • {doc.size}
+                                  {doc.category ? (
+                                    <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                                      {doc.category}
+                                    </span>
+                                  ) : (
+                                    <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded" title="Document uses old folder structure (backward compatible)">
+                                      Legacy
+                                    </span>
+                                  )}
                                 </p>
                               </div>
                             </div>
                             <div className="flex gap-2">
-                              <Button variant="ghost" size="sm">
-                                <Eye className="w-4 h-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm">
-                                <Download className="w-4 h-4" />
-                              </Button>
+                              {doc.url && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => window.open(doc.url, '_blank')}
+                                  title="View document"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {doc.url && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => {
+                                    const link = document.createElement('a');
+                                    link.href = doc.url!;
+                                    link.download = doc.name;
+                                    link.click();
+                                  }}
+                                  title="Download document"
+                                >
+                                  <Download className="w-4 h-4" />
+                                </Button>
+                              )}
                             </div>
                           </div>
                         </CardContent>

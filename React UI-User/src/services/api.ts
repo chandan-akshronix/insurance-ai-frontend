@@ -40,7 +40,28 @@ export async function updateUserProfile(userId: number | string, payload: any) {
  */
 export async function getUserPolicies(userId?: number | string) {
   const id = userId || localStorage.getItem('userId') || '1';
-  return request<any[]>(`/policy/user/${id}`);
+  
+  console.log('🔍 [POLICIES] getUserPolicies called');
+  console.log('🔍 [POLICIES] userId parameter:', userId);
+  console.log('🔍 [POLICIES] localStorage userId:', localStorage.getItem('userId'));
+  console.log('🔍 [POLICIES] Using userId:', id);
+  console.log('🔍 [POLICIES] API URL:', `/policy/user/${id}`);
+  
+  try {
+    const result = await request<any[]>(`/policy/user/${id}`);
+    console.log('✅ [POLICIES] API call successful');
+    console.log('✅ [POLICIES] Response type:', typeof result);
+    console.log('✅ [POLICIES] Is array:', Array.isArray(result));
+    console.log('✅ [POLICIES] Response length:', Array.isArray(result) ? result.length : 'N/A');
+    console.log('✅ [POLICIES] Response data:', result);
+    return result;
+  } catch (error: any) {
+    console.error('❌ [POLICIES] API call failed');
+    console.error('❌ [POLICIES] Error:', error);
+    console.error('❌ [POLICIES] Error status:', error.status);
+    console.error('❌ [POLICIES] Error message:', error.message);
+    throw error;
+  }
 }
 
 /**
@@ -66,7 +87,7 @@ export async function purchasePolicy(policyData: any) {
 
 /**
  * GET /claims/user/{userId}
- * Fetches all claims for the current user
+ * Fetches all claims for the current user (PostgreSQL)
  */
 export async function getUserClaims(userId?: number | string) {
   const id = userId || localStorage.getItem('userId') || '1';
@@ -75,7 +96,7 @@ export async function getUserClaims(userId?: number | string) {
 
 /**
  * GET /claims/{claimId}
- * Fetches details of a specific claim
+ * Fetches details of a specific claim (PostgreSQL)
  */
 export async function getClaimDetails(claimId: string) {
   return request<any>(`/claims/${claimId}`);
@@ -83,7 +104,7 @@ export async function getClaimDetails(claimId: string) {
 
 /**
  * POST /claims/
- * Submits a new insurance claim
+ * Submits a new insurance claim (PostgreSQL - structured schema)
  */
 export async function submitClaim(claimData: any) {
   return request(`/claims/`, {
@@ -94,12 +115,53 @@ export async function submitClaim(claimData: any) {
 
 /**
  * PUT /claims/{claimId}
- * Updates a claim (add documents, comments, etc.)
+ * Updates a claim (add documents, comments, etc.) (PostgreSQL)
  */
 export async function updateClaim(claimId: string, updateData: any) {
   return request(`/claims/${claimId}`, {
     method: 'PUT',
     body: updateData,
+  });
+}
+
+// ==================== CLAIMS APPLICATION APIs (MongoDB) ====================
+
+/**
+ * POST /claims/application
+ * Creates a new claim application with flexible JSON payload (MongoDB)
+ */
+export async function createClaimApplication(payload: any) {
+  return request(`/claims/application`, {
+    method: 'POST',
+    body: payload,
+  });
+}
+
+/**
+ * GET /claims/application/user/{userId}
+ * Fetches all claim applications for the current user (MongoDB)
+ */
+export async function getUserClaimApplications(userId?: number | string) {
+  const id = userId || localStorage.getItem('userId') || '1';
+  return request<any[]>(`/claims/application/user/${id}`);
+}
+
+/**
+ * GET /claims/application/{appId}
+ * Fetches details of a specific claim application (MongoDB)
+ */
+export async function getClaimApplicationById(appId: string) {
+  return request<any>(`/claims/application/${appId}`);
+}
+
+/**
+ * PATCH /claims/application/{appId}
+ * Updates a claim application (MongoDB)
+ */
+export async function updateClaimApplication(appId: string, payload: any) {
+  return request(`/claims/application/${appId}`, {
+    method: 'PATCH',
+    body: payload,
   });
 }
 
@@ -168,6 +230,11 @@ async function request<T>(url: string, options: { method?: string; body?: any; s
   const baseUrl = 'http://localhost:8000';
   const token = localStorage.getItem('token');
   
+  const fullUrl = `${baseUrl}${url}`;
+  console.log('🌐 [API] Making request to:', fullUrl);
+  console.log('🌐 [API] Method:', options.method || 'GET');
+  console.log('🌐 [API] Has token:', !!token);
+  
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
@@ -176,19 +243,41 @@ async function request<T>(url: string, options: { method?: string; body?: any; s
     headers['Authorization'] = `Bearer ${token}`;
   }
   
-  const response = await fetch(`${baseUrl}${url}`, {
-    method: options.method || 'GET',
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-  
-  if (!response.ok) {
-    const error: any = new Error(`API Error: ${response.statusText}`);
-    error.status = response.status;
+  try {
+    const response = await fetch(fullUrl, {
+      method: options.method || 'GET',
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+    
+    console.log('🌐 [API] Response status:', response.status);
+    console.log('🌐 [API] Response ok:', response.ok);
+    console.log('🌐 [API] Response headers:', Object.fromEntries(response.headers.entries()));
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ [API] Response error text:', errorText);
+      const error: any = new Error(`API Error: ${response.statusText}`);
+      error.status = response.status;
+      error.body = errorText;
+      throw error;
+    }
+    
+    const data = await response.json();
+    console.log('✅ [API] Response data:', data);
+    console.log('✅ [API] Response data type:', typeof data);
+    console.log('✅ [API] Is array:', Array.isArray(data));
+    return data;
+  } catch (error: any) {
+    console.error('❌ [API] Request failed:', error);
+    console.error('❌ [API] Error type:', error.constructor.name);
+    console.error('❌ [API] Error details:', {
+      message: error.message,
+      status: error.status,
+      body: error.body
+    });
     throw error;
   }
-  
-  return response.json();
 }
 
 // Type definitions
@@ -311,10 +400,11 @@ export async function uploadDocument(
   userId?: number | string,
   policyId?: number | string,
   claimId?: number | string,
-  onProgress?: (percent: number) => void
+  onProgress?: (percent: number) => void,
+  category?: string
 ) {
   // Log documentType before sending to backend
-  console.log('[DOCUMENT_UPLOAD] Frontend - Sending documentType:', documentType, 'for file:', file.name, 'userId:', userId);
+  console.log('[DOCUMENT_UPLOAD] Frontend - Sending documentType:', documentType, 'for file:', file.name, 'userId:', userId, 'category:', category);
   
   const formData = new FormData();
   formData.append('file', file);
@@ -322,25 +412,63 @@ export async function uploadDocument(
   formData.append('userId', String(userId || localStorage.getItem('userId') || '1'));
   if (policyId) formData.append('policyId', String(policyId));
   if (claimId) formData.append('claimId', String(claimId));
+  if (category) formData.append('category', category);
 
   const baseUrl = 'http://localhost:8000';
 
   return new Promise<any>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${baseUrl}/documents/upload`);
+    
     xhr.onload = () => {
+      console.log(`[DOCUMENT_UPLOAD] API Response status: ${xhr.status}`);
+      console.log(`[DOCUMENT_UPLOAD] API Response text:`, xhr.responseText);
+      
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const json = JSON.parse(xhr.responseText);
+          console.log(`[DOCUMENT_UPLOAD] Parsed response:`, json);
+          
+          // Validate response has required fields
+          if (!json.fileUrl && !json.fileurl) {
+            console.error(`[DOCUMENT_UPLOAD] Response missing fileUrl:`, json);
+            reject(new Error('Server response missing file URL'));
+            return;
+          }
+          
           resolve(json);
         } catch (e) {
-          resolve({});
+          console.error(`[DOCUMENT_UPLOAD] Failed to parse response:`, e);
+          console.error(`[DOCUMENT_UPLOAD] Response text:`, xhr.responseText);
+          reject(new Error('Invalid response from server'));
         }
       } else {
-        reject(new Error(xhr.statusText || 'Upload failed'));
+        // Try to parse error response
+        let errorMessage = xhr.statusText || 'Upload failed';
+        try {
+          const errorJson = JSON.parse(xhr.responseText);
+          errorMessage = errorJson.detail || errorJson.message || errorMessage;
+        } catch (e) {
+          // Use status text if JSON parsing fails
+        }
+        console.error(`[DOCUMENT_UPLOAD] Upload failed with status ${xhr.status}:`, errorMessage);
+        reject(new Error(errorMessage));
       }
     };
-    xhr.onerror = () => reject(new Error('Upload failed'));
+    
+    xhr.onerror = () => {
+      console.error(`[DOCUMENT_UPLOAD] Network error during upload`);
+      reject(new Error('Network error: Unable to connect to server'));
+    };
+    
+    xhr.ontimeout = () => {
+      console.error(`[DOCUMENT_UPLOAD] Upload timeout`);
+      reject(new Error('Upload timeout: Please try again'));
+    };
+    
+    // Set timeout (30 seconds)
+    xhr.timeout = 30000;
+    
     if (xhr.upload && onProgress) {
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
@@ -349,6 +477,7 @@ export async function uploadDocument(
         }
       };
     }
+    
     xhr.send(formData);
   });
 }
@@ -455,11 +584,17 @@ export const api = {
   getPolicyDetails,
   purchasePolicy,
   
-  // Claims
+  // Claims (PostgreSQL)
   getUserClaims,
   getClaimDetails,
   submitClaim,
   updateClaim,
+  
+  // Claims Applications (MongoDB)
+  createClaimApplication,
+  getUserClaimApplications,
+  getClaimApplicationById,
+  updateClaimApplication,
   
   // Activities
   getUserActivities,
