@@ -227,7 +227,7 @@ export async function getAdminUsers() {
 
 // Helper function for real API calls
 async function request<T>(url: string, options: { method?: string; body?: any; skipAuth?: boolean } = {}): Promise<T> {
-  const baseUrl = 'http://localhost:8000';
+  const baseUrl = 'http://20.193.150.128:8000';
   const token = localStorage.getItem('token');
   
   const fullUrl = `${baseUrl}${url}`;
@@ -414,7 +414,7 @@ export async function uploadDocument(
   if (claimId) formData.append('claimId', String(claimId));
   if (category) formData.append('category', category);
 
-  const baseUrl = 'http://localhost:8000';
+  const baseUrl = 'http://20.193.150.128:8000';
 
   return new Promise<any>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
