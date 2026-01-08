@@ -873,7 +873,7 @@ export default function LifeInsurance() {
       // Optionally update the application payment status
       if (appId) {
         try {
-          await fetch(`http://20.193.150.128:8000/life-insurance/${appId}`, {
+          await fetch(`http://localhost:8000/life-insurance/${appId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ payment: { method: formData.paymentMethod, status: 'paid', paid_at: new Date().toISOString() } })
