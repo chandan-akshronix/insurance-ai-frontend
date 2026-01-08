@@ -132,9 +132,10 @@ export function AIProcessFlow({ onSelectClaim }: AIProcessFlowProps) {
   useEffect(() => {
     const fetchApplications = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/agent/applications`);
+        const response = await fetch(`${API_BASE_URL}/agent/applications?type=policy`);
         if (!response.ok) throw new Error('Failed to fetch');
         const data: ApplicationProcess[] = await response.json();
+
         console.log("Fetched applications:", data); // DEBUG LOG
 
         const mapped = data.map(app => ({

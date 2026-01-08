@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { FileText, Send, XCircle, FileQuestion, ArrowUpCircle, RefreshCw, RotateCcw, Search, Eye, EyeOff } from 'lucide-react';
+import { FileText, Send, XCircle, FileQuestion, ArrowUpCircle, RefreshCw, RotateCcw, Search, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { Button } from './ui/button';
 import {
   Table,
@@ -12,244 +12,28 @@ import {
 } from './ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Input } from './ui/input';
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-interface ClaimsPipelineProps {
-  onSelectClaim: (claimId: string) => void;
+const API_BASE_URL = 'http://127.0.0.1:8000';
+
+interface ClaimData {
+  id: string;
+  customer: string;
+  amount: number;
+  type: string;
+  status: string;
+  assignedTo: string;
+  time: string;
 }
 
-// Active Claims Table Data
-const activeClaimsData = [
-  // New Claims
-  {
-    id: 'CLM-2045',
-    customer: 'Arjun Kapoor',
-    amount: 125000,
-    type: 'Health Insurance',
-    status: 'new_claim',
-    assignedTo: 'AI Agent 1',
-    time: '5 mins ago'
-  },
-  {
-    id: 'CLM-2038',
-    customer: 'Meera Reddy',
-    amount: 42000,
-    type: 'Life Insurance',
-    status: 'new_claim',
-    assignedTo: 'AI Agent 3',
-    time: '1 hour ago'
-  },
-  {
-    id: 'CLM-2032',
-    customer: 'Aditya Verma',
-    amount: 95000,
-    type: 'Auto Claims',
-    status: 'new_claim',
-    assignedTo: 'AI Agent 2',
-    time: '2 hours ago'
-  },
-  {
-    id: 'CLM-2028',
-    customer: 'Pooja Nair',
-    amount: 156000,
-    type: 'Health Insurance',
-    status: 'new_claim',
-    assignedTo: 'AI Agent 1',
-    time: '3 hours ago'
-  },
-  
-  // Sent for Approval
-  {
-    id: 'CLM-2044',
-    customer: 'Neha Gupta',
-    amount: 89000,
-    type: 'Auto Claims',
-    status: 'sent_for_approval',
-    assignedTo: 'Senior Manager',
-    time: '12 mins ago'
-  },
-  {
-    id: 'CLM-2037',
-    customer: 'Sanjay Iyer',
-    amount: 215000,
-    type: 'Property Insurance',
-    status: 'sent_for_approval',
-    assignedTo: 'Senior Manager',
-    time: '30 mins ago'
-  },
-  {
-    id: 'CLM-2031',
-    customer: 'Riya Chatterjee',
-    amount: 78000,
-    type: 'Health Insurance',
-    status: 'sent_for_approval',
-    assignedTo: 'Approval Team',
-    time: '2 hours ago'
-  },
-  
-  // Rejected
-  {
-    id: 'CLM-2043',
-    customer: 'Karthik Menon',
-    amount: 45000,
-    type: 'Life Insurance',
-    status: 'rejected',
-    assignedTo: 'AI Agent 2',
-    time: '18 mins ago'
-  },
-  {
-    id: 'CLM-2036',
-    customer: 'Pradeep Kumar',
-    amount: 62000,
-    type: 'Auto Claims',
-    status: 'rejected',
-    assignedTo: 'Senior Underwriter',
-    time: '1 hour ago'
-  },
-  {
-    id: 'CLM-2029',
-    customer: 'Lakshmi Patel',
-    amount: 38000,
-    type: 'Health Insurance',
-    status: 'rejected',
-    assignedTo: 'AI Agent 1',
-    time: '4 hours ago'
-  },
-  
-  // Ask for Document
-  {
-    id: 'CLM-2042',
-    customer: 'Simran Kaur',
-    amount: 67500,
-    type: 'Health Insurance',
-    status: 'ask_for_document',
-    assignedTo: 'AI Agent 3',
-    time: '25 mins ago'
-  },
-  {
-    id: 'CLM-2035',
-    customer: 'Manish Jain',
-    amount: 112000,
-    type: 'Life Insurance',
-    status: 'ask_for_document',
-    assignedTo: 'Document Validator',
-    time: '1 hour ago'
-  },
-  {
-    id: 'CLM-2030',
-    customer: 'Divya Rao',
-    amount: 85000,
-    type: 'Property Insurance',
-    status: 'ask_for_document',
-    assignedTo: 'AI Agent 2',
-    time: '3 hours ago'
-  },
-  {
-    id: 'CLM-2026',
-    customer: 'Harish Shetty',
-    amount: 48000,
-    type: 'Auto Claims',
-    status: 'ask_for_document',
-    assignedTo: 'AI Agent 3',
-    time: '5 hours ago'
-  },
-  
-  // Escalate to Senior
-  {
-    id: 'CLM-2041',
-    customer: 'Rohit Sharma',
-    amount: 195000,
-    type: 'Property Insurance',
-    status: 'escalate_to_senior',
-    assignedTo: 'Senior Underwriter',
-    time: '32 mins ago'
-  },
-  {
-    id: 'CLM-2034',
-    customer: 'Tanvi Desai',
-    amount: 285000,
-    type: 'Health Insurance',
-    status: 'escalate_to_senior',
-    assignedTo: 'Senior Manager',
-    time: '1 hour ago'
-  },
-  {
-    id: 'CLM-2027',
-    customer: 'Vishal Mehta',
-    amount: 320000,
-    type: 'Life Insurance',
-    status: 'escalate_to_senior',
-    assignedTo: 'Chief Underwriter',
-    time: '4 hours ago'
-  },
-  
-  // Updated Application
-  {
-    id: 'CLM-2040',
-    customer: 'Anjali Deshmukh',
-    amount: 53000,
-    type: 'Auto Claims',
-    status: 'updated_application',
-    assignedTo: 'AI Agent 1',
-    time: '45 mins ago'
-  },
-  {
-    id: 'CLM-2033',
-    customer: 'Suresh Bhat',
-    amount: 72000,
-    type: 'Health Insurance',
-    status: 'updated_application',
-    assignedTo: 'AI Agent 2',
-    time: '2 hours ago'
-  },
-  {
-    id: 'CLM-2025',
-    customer: 'Kavya Krishnan',
-    amount: 96000,
-    type: 'Property Insurance',
-    status: 'updated_application',
-    assignedTo: 'AI Agent 3',
-    time: '6 hours ago'
-  },
-  
-  // Reapplication
-  {
-    id: 'CLM-2039',
-    customer: 'Vikrant Singh',
-    amount: 78000,
-    type: 'Health Insurance',
-    status: 'reapplication',
-    assignedTo: 'AI Agent 2',
-    time: '1 hour ago'
-  },
-  {
-    id: 'CLM-2024',
-    customer: 'Shalini Tripathi',
-    amount: 105000,
-    type: 'Life Insurance',
-    status: 'reapplication',
-    assignedTo: 'AI Agent 1',
-    time: '3 hours ago'
-  },
-  {
-    id: 'CLM-2023',
-    customer: 'Ramesh Choudhary',
-    amount: 64000,
-    type: 'Auto Claims',
-    status: 'reapplication',
-    assignedTo: 'AI Agent 3',
-    time: '7 hours ago'
-  },
-];
-
 // Reusable Claims Table Component
-function ClaimsTable({ 
-  claims, 
-  onSelectClaim, 
+function ClaimsTable({
+  claims,
+  onSelectClaim,
   getStatusBadge,
   searchTerm
-}: { 
-  claims: typeof activeClaimsData; 
+}: {
+  claims: ClaimData[];
   onSelectClaim: (claimId: string) => void;
   getStatusBadge: (status: string) => React.ReactNode;
   searchTerm: string;
@@ -291,8 +75,8 @@ function ClaimsTable({
           </TableHeader>
           <TableBody>
             {filteredClaims.map((claim) => (
-              <TableRow 
-                key={claim.id} 
+              <TableRow
+                key={claim.id}
                 className="cursor-pointer hover:bg-blue-50/50 transition-colors"
                 onClick={() => onSelectClaim(claim.id)}
               >
@@ -324,46 +108,98 @@ function ClaimsTable({
   );
 }
 
-export function ClaimsPipeline({ onSelectClaim }: ClaimsPipelineProps) {
+export function ClaimsPipeline({ onSelectClaim }: { onSelectClaim: (claimId: string) => void }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isVisible, setIsVisible] = useState(true);
+  const [activeClaimsData, setActiveClaimsData] = useState<ClaimData[]>([]);
+
+  useEffect(() => {
+    const fetchClaims = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/claims/all-applications`);
+        if (!response.ok) throw new Error('Failed to fetch');
+        const data = await response.json();
+
+        const mapped: ClaimData[] = data.map((doc: any) => {
+          // Extract amount
+          let amount = 0;
+          if (doc.hospitalization_details?.estimated_amount) {
+            amount = parseFloat(doc.hospitalization_details.estimated_amount);
+          } else if (doc.accident_details?.estimated_repair_cost) {
+            amount = parseFloat(doc.accident_details.estimated_repair_cost);
+          } else if (doc.claim_type === 'life') {
+            // Fallback for life - maybe use coverage if we can get it, but 0 for now as dummy
+            amount = 0;
+          }
+
+          return {
+            id: doc._id,
+            customer: doc.claimant_info?.name || doc.userId || 'Unknown',
+            amount: isNaN(amount) ? 0 : amount,
+            type: doc.claim_type ? doc.claim_type.charAt(0).toUpperCase() + doc.claim_type.slice(1) + ' Insurance' : 'General Insurance',
+            status: doc.status || 'new_claim',
+            assignedTo: 'AI Agent',
+            time: doc.created_at ? new Date(doc.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recently'
+          };
+        });
+
+        setActiveClaimsData(mapped);
+      } catch (e) {
+        console.error("Error fetching claims:", e);
+      }
+    };
+
+    fetchClaims();
+    const interval = setInterval(fetchClaims, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { label: string; icon: any; className: string }> = {
-      new_claim: { 
-        label: 'New Claim', 
-        icon: FileText, 
-        className: 'bg-blue-100 text-blue-700 border-blue-200' 
+      new_claim: {
+        label: 'New Claim',
+        icon: FileText,
+        className: 'bg-blue-100 text-blue-700 border-blue-200'
       },
-      sent_for_approval: { 
-        label: 'Sent for Approval', 
-        icon: Send, 
-        className: 'bg-purple-100 text-purple-700 border-purple-200' 
+      submitted: {
+        label: 'Submitted',
+        icon: FileText,
+        className: 'bg-blue-100 text-blue-700 border-blue-200'
       },
-      rejected: { 
-        label: 'Rejected', 
-        icon: XCircle, 
-        className: 'bg-red-100 text-red-700 border-red-200' 
+      sent_for_approval: {
+        label: 'Sent for Approval',
+        icon: Send,
+        className: 'bg-purple-100 text-purple-700 border-purple-200'
       },
-      ask_for_document: { 
-        label: 'Ask for Document', 
-        icon: FileQuestion, 
-        className: 'bg-orange-100 text-orange-700 border-orange-200' 
+      rejected: {
+        label: 'Rejected',
+        icon: XCircle,
+        className: 'bg-red-100 text-red-700 border-red-200'
       },
-      escalate_to_senior: { 
-        label: 'Escalate to Senior', 
-        icon: ArrowUpCircle, 
-        className: 'bg-amber-100 text-amber-700 border-amber-200' 
+      ask_for_document: {
+        label: 'Ask for Document',
+        icon: FileQuestion,
+        className: 'bg-orange-100 text-orange-700 border-orange-200'
       },
-      updated_application: { 
-        label: 'Updated Application', 
-        icon: RefreshCw, 
-        className: 'bg-cyan-100 text-cyan-700 border-cyan-200' 
+      escalate_to_senior: {
+        label: 'Escalate to Senior',
+        icon: ArrowUpCircle,
+        className: 'bg-amber-100 text-amber-700 border-amber-200'
       },
-      reapplication: { 
-        label: 'Reapplication', 
-        icon: RotateCcw, 
-        className: 'bg-indigo-100 text-indigo-700 border-indigo-200' 
+      updated_application: {
+        label: 'Updated Application',
+        icon: RefreshCw,
+        className: 'bg-cyan-100 text-cyan-700 border-cyan-200'
+      },
+      reapplication: {
+        label: 'Reapplication',
+        icon: RotateCcw,
+        className: 'bg-indigo-100 text-indigo-700 border-indigo-200'
+      },
+      approved: {
+        label: 'Approved',
+        icon: CheckCircle,
+        className: 'bg-green-100 text-green-700 border-green-200'
       },
     };
 
@@ -414,130 +250,87 @@ export function ClaimsPipeline({ onSelectClaim }: ClaimsPipelineProps) {
           </div>
         </CardHeader>
         {isVisible && (
-        <CardContent className="p-6">
-          <Tabs defaultValue="all" className="w-full">
-            <TabsList className="grid grid-cols-4 w-full h-auto gap-2 bg-transparent p-0 mb-6">
-              <TabsTrigger value="all" className="px-3 py-3 data-[state=active]:bg-gray-700 data-[state=active]:text-white rounded-lg border border-gray-200 data-[state=active]:border-gray-700 flex items-center justify-center gap-2">
-                <span>All Claims</span>
-                <Badge className="bg-gray-600 text-white border-0 text-xs px-2 py-0.5">{activeClaimsData.length}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="new_claim" className="px-3 py-3 data-[state=active]:bg-blue-600 data-[state=active]:text-white rounded-lg border border-gray-200 data-[state=active]:border-blue-600 flex items-center justify-center gap-2">
-                <span>New Claim</span>
-                <Badge className="bg-blue-500 text-white border-0 text-xs px-2 py-0.5">
-                  {activeClaimsData.filter(c => c.status === 'new_claim').length}
-                </Badge>
-              </TabsTrigger>
-              <TabsTrigger value="sent_for_approval" className="px-3 py-3 data-[state=active]:bg-purple-600 data-[state=active]:text-white rounded-lg border border-gray-200 data-[state=active]:border-purple-600 flex items-center justify-center gap-2">
-                <span>Sent for Approval</span>
-                <Badge className="bg-purple-500 text-white border-0 text-xs px-2 py-0.5">
-                  {activeClaimsData.filter(c => c.status === 'sent_for_approval').length}
-                </Badge>
-              </TabsTrigger>
-              <TabsTrigger value="rejected" className="px-3 py-3 data-[state=active]:bg-red-600 data-[state=active]:text-white rounded-lg border border-gray-200 data-[state=active]:border-red-600 flex items-center justify-center gap-2">
-                <span>Rejected</span>
-                <Badge className="bg-red-500 text-white border-0 text-xs px-2 py-0.5">
-                  {activeClaimsData.filter(c => c.status === 'rejected').length}
-                </Badge>
-              </TabsTrigger>
-              <TabsTrigger value="ask_for_document" className="px-3 py-3 data-[state=active]:bg-orange-600 data-[state=active]:text-white rounded-lg border border-gray-200 data-[state=active]:border-orange-600 flex items-center justify-center gap-2">
-                <span>Ask for Document</span>
-                <Badge className="bg-orange-500 text-white border-0 text-xs px-2 py-0.5">
-                  {activeClaimsData.filter(c => c.status === 'ask_for_document').length}
-                </Badge>
-              </TabsTrigger>
-              <TabsTrigger value="escalate_to_senior" className="px-3 py-3 data-[state=active]:bg-amber-600 data-[state=active]:text-white rounded-lg border border-gray-200 data-[state=active]:border-amber-600 flex items-center justify-center gap-2">
-                <span>Escalate to Senior</span>
-                <Badge className="bg-amber-500 text-white border-0 text-xs px-2 py-0.5">
-                  {activeClaimsData.filter(c => c.status === 'escalate_to_senior').length}
-                </Badge>
-              </TabsTrigger>
-              <TabsTrigger value="updated_application" className="px-3 py-3 data-[state=active]:bg-cyan-600 data-[state=active]:text-white rounded-lg border border-gray-200 data-[state=active]:border-cyan-600 flex items-center justify-center gap-2">
-                <span>Updated Application</span>
-                <Badge className="bg-cyan-500 text-white border-0 text-xs px-2 py-0.5">
-                  {activeClaimsData.filter(c => c.status === 'updated_application').length}
-                </Badge>
-              </TabsTrigger>
-              <TabsTrigger value="reapplication" className="px-3 py-3 data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-lg border border-gray-200 data-[state=active]:border-indigo-600 flex items-center justify-center gap-2">
-                <span>Reapplication</span>
-                <Badge className="bg-indigo-500 text-white border-0 text-xs px-2 py-0.5">
-                  {activeClaimsData.filter(c => c.status === 'reapplication').length}
-                </Badge>
-              </TabsTrigger>
-            </TabsList>
-
-              <TabsContent value="all" className="mt-0">
-                <ClaimsTable 
-                  claims={activeClaimsData} 
-                  onSelectClaim={onSelectClaim} 
-                  getStatusBadge={getStatusBadge}
-                  searchTerm={searchTerm}
-                />
-              </TabsContent>
+          <CardContent className="p-6">
+            <Tabs defaultValue="new_claim" className="w-full">
+              <TabsList className="grid grid-cols-5 w-full h-auto gap-2 bg-transparent p-0 mb-6">
+                <TabsTrigger value="new_claim" className="px-3 py-3 data-[state=active]:bg-blue-600 data-[state=active]:text-white rounded-lg border border-gray-200 data-[state=active]:border-blue-600 flex items-center justify-center gap-2">
+                  <span>New Claim</span>
+                  <Badge className="bg-blue-500 text-white border-0 text-xs px-2 py-0.5">
+                    {activeClaimsData.filter(c => c.status === 'new_claim' || c.status === 'submitted').length}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger value="ask_for_document" className="px-3 py-3 data-[state=active]:bg-orange-600 data-[state=active]:text-white rounded-lg border border-gray-200 data-[state=active]:border-orange-600 flex items-center justify-center gap-2">
+                  <span>Ask for Document</span>
+                  <Badge className="bg-orange-500 text-white border-0 text-xs px-2 py-0.5">
+                    {activeClaimsData.filter(c => c.status === 'ask_for_document').length}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger value="escalate_to_senior" className="px-3 py-3 data-[state=active]:bg-amber-600 data-[state=active]:text-white rounded-lg border border-gray-200 data-[state=active]:border-amber-600 flex items-center justify-center gap-2">
+                  <span>Escalate to Senior</span>
+                  <Badge className="bg-amber-500 text-white border-0 text-xs px-2 py-0.5">
+                    {activeClaimsData.filter(c => c.status === 'escalate_to_senior').length}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger value="approved" className="px-3 py-3 data-[state=active]:bg-green-600 data-[state=active]:text-white rounded-lg border border-gray-200 data-[state=active]:border-green-600 flex items-center justify-center gap-2">
+                  <span>Approved</span>
+                  <Badge className="bg-green-500 text-white border-0 text-xs px-2 py-0.5">
+                    {activeClaimsData.filter(c => c.status === 'approved').length}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger value="rejected" className="px-3 py-3 data-[state=active]:bg-red-600 data-[state=active]:text-white rounded-lg border border-gray-200 data-[state=active]:border-red-600 flex items-center justify-center gap-2">
+                  <span>Rejected</span>
+                  <Badge className="bg-red-500 text-white border-0 text-xs px-2 py-0.5">
+                    {activeClaimsData.filter(c => c.status === 'rejected').length}
+                  </Badge>
+                </TabsTrigger>
+              </TabsList>
 
               <TabsContent value="new_claim" className="mt-0">
-                <ClaimsTable 
-                  claims={activeClaimsData.filter(c => c.status === 'new_claim')} 
-                  onSelectClaim={onSelectClaim} 
-                  getStatusBadge={getStatusBadge}
-                  searchTerm={searchTerm}
-                />
-              </TabsContent>
-
-              <TabsContent value="sent_for_approval" className="mt-0">
-                <ClaimsTable 
-                  claims={activeClaimsData.filter(c => c.status === 'sent_for_approval')} 
-                  onSelectClaim={onSelectClaim} 
-                  getStatusBadge={getStatusBadge}
-                  searchTerm={searchTerm}
-                />
-              </TabsContent>
-
-              <TabsContent value="rejected" className="mt-0">
-                <ClaimsTable 
-                  claims={activeClaimsData.filter(c => c.status === 'rejected')} 
-                  onSelectClaim={onSelectClaim} 
+                <ClaimsTable
+                  claims={activeClaimsData.filter(c => c.status === 'new_claim' || c.status === 'submitted')}
+                  onSelectClaim={onSelectClaim}
                   getStatusBadge={getStatusBadge}
                   searchTerm={searchTerm}
                 />
               </TabsContent>
 
               <TabsContent value="ask_for_document" className="mt-0">
-                <ClaimsTable 
-                  claims={activeClaimsData.filter(c => c.status === 'ask_for_document')} 
-                  onSelectClaim={onSelectClaim} 
+                <ClaimsTable
+                  claims={activeClaimsData.filter(c => c.status === 'ask_for_document')}
+                  onSelectClaim={onSelectClaim}
                   getStatusBadge={getStatusBadge}
                   searchTerm={searchTerm}
                 />
               </TabsContent>
 
               <TabsContent value="escalate_to_senior" className="mt-0">
-                <ClaimsTable 
-                  claims={activeClaimsData.filter(c => c.status === 'escalate_to_senior')} 
-                  onSelectClaim={onSelectClaim} 
+                <ClaimsTable
+                  claims={activeClaimsData.filter(c => c.status === 'escalate_to_senior')}
+                  onSelectClaim={onSelectClaim}
                   getStatusBadge={getStatusBadge}
                   searchTerm={searchTerm}
                 />
               </TabsContent>
 
-              <TabsContent value="updated_application" className="mt-0">
-                <ClaimsTable 
-                  claims={activeClaimsData.filter(c => c.status === 'updated_application')} 
-                  onSelectClaim={onSelectClaim} 
+              <TabsContent value="approved" className="mt-0">
+                <ClaimsTable
+                  claims={activeClaimsData.filter(c => c.status === 'approved')}
+                  onSelectClaim={onSelectClaim}
                   getStatusBadge={getStatusBadge}
                   searchTerm={searchTerm}
                 />
               </TabsContent>
 
-              <TabsContent value="reapplication" className="mt-0">
-                <ClaimsTable 
-                  claims={activeClaimsData.filter(c => c.status === 'reapplication')} 
-                  onSelectClaim={onSelectClaim} 
+              <TabsContent value="rejected" className="mt-0">
+                <ClaimsTable
+                  claims={activeClaimsData.filter(c => c.status === 'rejected')}
+                  onSelectClaim={onSelectClaim}
                   getStatusBadge={getStatusBadge}
                   searchTerm={searchTerm}
                 />
               </TabsContent>
-          </Tabs>
-        </CardContent>
+            </Tabs>
+          </CardContent>
         )}
       </Card>
     </div>

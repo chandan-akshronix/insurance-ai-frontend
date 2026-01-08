@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Check, Upload, X, FileText, Image as ImageIcon, AlertCircle, Calendar, MapPin, User, Phone, Mail, CreditCard, ArrowLeft, ArrowRight, CheckCircle, Heart, Car, Activity, Plus, Info, Building2, Stethoscope, Clock, Download, Camera, Briefcase, Shield, Award, Loader2, FileCheck, Trash2 } from 'lucide-react';
+import { Check, Upload, X, FileText, Image as ImageIcon, AlertCircle, Calendar, MapPin, User, Phone, Mail, CreditCard, ArrowLeft, ArrowRight, CheckCircle, Heart, Car, Activity, Plus, Info, Building2, Stethoscope, Clock, Download, Camera, Briefcase, Shield, Award, Loader2, FileCheck, Trash2, Home } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -52,8 +52,7 @@ interface Policy {
   nomineeId?: number;             // Nominee ID (optional)
   personalDetails?: any;          // Personal details JSON (optional)
   policyDocument?: string;        // Policy document URL (optional)
-  // Note: Backend does not return insuranceCompany or insurer fields
-  // These are handled as fallback in mapPolicyToUI
+  applicationId?: string;         // MongoDB Application ID (Source of Truth)
 }
 
 export default function ClaimsSubmit() {
@@ -64,26 +63,26 @@ export default function ClaimsSubmit() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [claimNumber, setClaimNumber] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   // Policy states
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [loadingPolicies, setLoadingPolicies] = useState<boolean>(false);
   const [policiesError, setPoliciesError] = useState<string | null>(null);
-  
+
   const [formData, setFormData] = useState({
     // Step 1: Claim Type & Policy
     selectedPolicy: '',
-    
+
     // Step 2: Intimation Details
     intimationDate: new Date().toISOString().split('T')[0],
     intimationTime: new Date().toTimeString().slice(0, 5),
-    
+
     // Step 3: Incident/Hospitalization Details
     incidentDate: '',
     incidentTime: '',
     incidentLocation: '',
     incidentDescription: '',
-    
+
     // Health specific
     claimCategory: '', // cashless, reimbursement
     hospitalName: '',
@@ -97,7 +96,7 @@ export default function ClaimsSubmit() {
     roomType: '',
     doctorName: '',
     estimatedAmount: '',
-    
+
     // Car specific
     accidentType: '',
     policeStation: '',
@@ -112,7 +111,7 @@ export default function ClaimsSubmit() {
     vehicleCondition: '',
     repairWorkshop: '',
     estimatedRepairCost: '',
-    
+
     // Life specific
     deceasedName: '',
     deceasedDOB: '',
@@ -124,9 +123,9 @@ export default function ClaimsSubmit() {
     deathType: '', // natural, accidental, illness
     hospitalNameDeath: '',
     claimantRelation: '',
-    
+
     // Step 4: Documents Upload (handled separately)
-    
+
     // Step 5: Claimant/Patient Info
     claimantName: '',
     patientName: '',
@@ -137,7 +136,7 @@ export default function ClaimsSubmit() {
     claimantAddress: '',
     claimantCity: '',
     claimantPincode: '',
-    
+
     // Step 6: Bank Details
     accountHolderName: '',
     accountNumber: '',
@@ -160,14 +159,14 @@ export default function ClaimsSubmit() {
 
   const handleFileUpload = (files: FileList | null, category: string) => {
     if (!files) return;
-    
+
     // Validate category if claim type is set
     if (claimType && category) {
       try {
         // Import category validation (dynamic import to avoid circular dependencies)
         const { isValidCategory, normalizeCategoryId } = require('../../utils/categoryMapping');
         const normalizedCategory = normalizeCategoryId(category);
-        
+
         if (!isValidCategory(claimType as 'health' | 'life' | 'car', normalizedCategory)) {
           console.warn(`[CLAIM_DOCUMENT_UPLOAD] ⚠️  Category '${category}' (normalized: '${normalizedCategory}') may not be valid for claim type '${claimType}'`);
           // Don't block upload, but log warning
@@ -178,10 +177,10 @@ export default function ClaimsSubmit() {
         console.debug('[CLAIM_DOCUMENT_UPLOAD] Category validation not available:', error);
       }
     }
-    
+
     const userIdForUpload = user?.id || localStorage.getItem('userId') || '1';
     const policyIdForUpload = formData.selectedPolicy ? String(formData.selectedPolicy) : undefined;
-    
+
     // Create file objects
     const newFiles: UploadedFile[] = Array.from(files).map(file => ({
       id: Math.random().toString(36).substr(2, 9),
@@ -197,15 +196,15 @@ export default function ClaimsSubmit() {
       uploadedUrl: null,              // Will be set after successful upload
       documentId: null                // Will be set after successful upload
     }));
-    
+
     // Add files to state and upload immediately (like application process)
     setUploadedFiles(prev => {
       const updated = [...prev, ...newFiles];
-      
+
       // Upload each new file immediately
       newFiles.forEach((fileObj, localIndex) => {
         const globalIndex = prev.length + localIndex;
-        
+
         // Upload immediately (no claimId yet, will be updated later if needed)
         // Pass category to organize documents in folders
         uploadDocument(
@@ -229,25 +228,25 @@ export default function ClaimsSubmit() {
           // Extract fileUrl with multiple fallbacks
           const fileUrl = res.fileUrl || res.fileurl || res.url || null;
           const documentId = res.documentId || res.document_id || res.id || null;
-          
+
           if (!fileUrl) {
             throw new Error('Upload succeeded but no file URL returned from server');
           }
-          
+
           // Verify Azure Blob Storage URL
           const isAzureUrl = fileUrl.includes('blob.core.windows.net');
           if (!isAzureUrl) {
             console.warn(`[CLAIM_DOCUMENT_UPLOAD] ⚠️  File uploaded but not to Azure: ${fileUrl}`);
             console.warn(`[CLAIM_DOCUMENT_UPLOAD] Expected Azure URL (blob.core.windows.net), got: ${fileUrl.substring(0, 100)}`);
           }
-          
+
           // Update state with success
           setUploadedFiles(current => {
             const next = [...current];
             const fileIndex = next.findIndex(f => f.id === fileObj.id);
             if (fileIndex !== -1) {
-              next[fileIndex] = { 
-                ...next[fileIndex], 
+              next[fileIndex] = {
+                ...next[fileIndex],
                 uploadedUrl: fileUrl,
                 documentId: documentId,
                 progress: 100,
@@ -257,13 +256,13 @@ export default function ClaimsSubmit() {
             }
             return next;
           });
-          
+
           console.log(`[CLAIM_DOCUMENT_UPLOAD] ✅ File uploaded successfully`);
           console.log(`[CLAIM_DOCUMENT_UPLOAD]   URL: ${fileUrl.substring(0, 100)}...`);
           console.log(`[CLAIM_DOCUMENT_UPLOAD]   Azure Storage: ${isAzureUrl ? '✅ YES' : '❌ NO'}`);
           console.log(`[CLAIM_DOCUMENT_UPLOAD]   Document ID: ${documentId}`);
           console.log(`[CLAIM_DOCUMENT_UPLOAD]   Category: ${fileObj.category}`);
-          
+
           // Verify Azure URL and log for debugging
           if (isAzureUrl) {
             console.log(`[CLAIM_DOCUMENT_UPLOAD] ✅ Verified: Document is in Azure Blob Storage`);
@@ -276,11 +275,11 @@ export default function ClaimsSubmit() {
           }
         }).catch((error: any) => {
           console.error(`[CLAIM_DOCUMENT_UPLOAD] ❌ Upload failed for ${fileObj.name}:`, error);
-          
+
           // Categorize errors for better user feedback
           let errorMessage = 'Upload failed';
           let isAzureError = false;
-          
+
           if (error?.message) {
             const msg = error.message.toLowerCase();
             if (msg.includes('azure') || msg.includes('blob') || msg.includes('storage')) {
@@ -302,14 +301,14 @@ export default function ClaimsSubmit() {
               errorMessage = error.message;
             }
           }
-          
+
           // Update state with error
           setUploadedFiles(current => {
             const next = [...current];
             const fileIndex = next.findIndex(f => f.id === fileObj.id);
             if (fileIndex !== -1) {
-              next[fileIndex] = { 
-                ...next[fileIndex], 
+              next[fileIndex] = {
+                ...next[fileIndex],
                 uploading: false,
                 error: errorMessage,
                 progress: 0
@@ -317,7 +316,7 @@ export default function ClaimsSubmit() {
             }
             return next;
           });
-          
+
           if (isAzureError) {
             toast.error(`Azure Storage Error: "${fileObj.name}" - ${errorMessage}`);
           } else {
@@ -325,7 +324,7 @@ export default function ClaimsSubmit() {
           }
         });
       });
-      
+
       return updated;
     });
   };
@@ -348,10 +347,10 @@ export default function ClaimsSubmit() {
     const fetchPolicies = async () => {
       setLoadingPolicies(true);
       setPoliciesError(null);
-      
+
       try {
         const userId = user?.id || localStorage.getItem('userId');
-        
+
         if (!userId) {
           console.warn('[CLAIMS] No userId available to fetch policies');
           setLoadingPolicies(false);
@@ -360,11 +359,11 @@ export default function ClaimsSubmit() {
 
         console.log('[CLAIMS] Fetching policies for userId:', userId);
         const policiesData = await getUserPolicies(userId);
-        
+
         // Handle array response directly
         const policiesArray = Array.isArray(policiesData) ? policiesData : [];
         console.log('[CLAIMS] Fetched policies:', policiesArray.length, 'policies');
-        
+
         setPolicies(policiesArray);
       } catch (error: any) {
         console.error('[CLAIMS] Error fetching policies:', error);
@@ -381,26 +380,26 @@ export default function ClaimsSubmit() {
   // Filter policies by claim type
   const getPoliciesByType = (claimType: string): Policy[] => {
     if (!claimType || !policies.length) return [];
-    
+
     return policies.filter(policy => {
       const policyType = (policy.type || '').toLowerCase();
       const policyName = (policy.planName || '').toLowerCase();
-      
-      switch(claimType) {
+
+      switch (claimType) {
         case 'health':
-          return policyType.includes('health') || 
-                 policyType.includes('medical') ||
-                 policyName.includes('health') ||
-                 policyType === 'health_insurance';
+          return policyType.includes('health') ||
+            policyType.includes('medical') ||
+            policyName.includes('health') ||
+            policyType === 'health_insurance';
         case 'life':
-          return policyType.includes('life') || 
-                 policyType.includes('term') ||
-                 policyType === 'life_insurance';
+          return policyType.includes('life') ||
+            policyType.includes('term') ||
+            policyType === 'life_insurance';
         case 'car':
-          return policyType.includes('car') || 
-                 policyType.includes('vehicle') ||
-                 policyType.includes('motor') ||
-                 policyType === 'vehicle_insurance';
+          return policyType.includes('car') ||
+            policyType.includes('vehicle') ||
+            policyType.includes('motor') ||
+            policyType === 'vehicle_insurance';
         default:
           return false;
       }
@@ -421,7 +420,7 @@ export default function ClaimsSubmit() {
         if (isNaN(num)) return coverage;
         coverage = num;
       }
-      
+
       if (coverage >= 100000) {
         return `₹${(coverage / 100000).toFixed(1)} Lakhs`;
       } else if (coverage >= 1000) {
@@ -435,10 +434,10 @@ export default function ClaimsSubmit() {
       if (!dateStr) return 'N/A';
       try {
         const date = new Date(dateStr);
-        return date.toLocaleDateString('en-IN', { 
-          day: '2-digit', 
-          month: '2-digit', 
-          year: 'numeric' 
+        return date.toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
         });
       } catch {
         return dateStr;
@@ -465,33 +464,33 @@ export default function ClaimsSubmit() {
   const uploadFileAtIndex = async (index: number, claimId?: string | number) => {
     // Get file from state
     let fileObj: UploadedFile | null = null;
-    
+
     setUploadedFiles(prev => {
       fileObj = prev[index] || null;
       return prev; // Don't modify, just read
     });
-    
+
     if (!fileObj || !fileObj.file) {
       console.warn(`File at index ${index} not found or no file object`);
       return null;
     }
-    
+
     // Prevent uploading if already uploading
     if (fileObj.uploading) {
       console.warn(`File at index ${index} is already uploading`);
       return null;
     }
-    
+
     // If already uploaded successfully, return existing data
     if (fileObj.uploadedUrl && !fileObj.error) {
       console.log(`File at index ${index} already uploaded successfully`);
-      return { 
-        fileUrl: fileObj.uploadedUrl, 
+      return {
+        fileUrl: fileObj.uploadedUrl,
         documentId: fileObj.documentId,
         fileName: fileObj.name
       };
     }
-    
+
     const userIdForUpload = user?.id || localStorage.getItem('userId') || '1';
     const policyIdForUpload = formData.selectedPolicy || undefined;
 
@@ -499,11 +498,11 @@ export default function ClaimsSubmit() {
     setUploadedFiles(prev => {
       const next = [...prev];
       if (next[index]) {
-        next[index] = { 
-          ...next[index], 
-          uploading: true, 
-          progress: 0, 
-          error: null 
+        next[index] = {
+          ...next[index],
+          uploading: true,
+          progress: 0,
+          error: null
         };
       }
       return next;
@@ -511,7 +510,7 @@ export default function ClaimsSubmit() {
 
     try {
       console.log(`[CLAIM_DOCUMENT_UPLOAD] Uploading file at index ${index}:`, fileObj.file.name, 'with documentType: claim_document');
-      
+
       // Upload document with claim_document type
       // Use claimId if provided (after claim creation), otherwise undefined (will use pending folder)
       // Pass category to organize documents in category-based folders
@@ -538,11 +537,11 @@ export default function ClaimsSubmit() {
       console.log(`[CLAIM_DOCUMENT_UPLOAD] Full API response:`, res);
       console.log(`[CLAIM_DOCUMENT_UPLOAD] Response fileUrl:`, res.fileUrl || res.fileurl);
       console.log(`[CLAIM_DOCUMENT_UPLOAD] Response documentId:`, res.documentId || res.document_id);
-      
+
       // Extract fileUrl with multiple fallbacks
       const fileUrl = res.fileUrl || res.fileurl || res.url || null;
       const documentId = res.documentId || res.document_id || res.id || null;
-      
+
       if (!fileUrl) {
         console.error(`[CLAIM_DOCUMENT_UPLOAD] No fileUrl in response:`, res);
         throw new Error('Upload succeeded but no file URL returned from server');
@@ -552,8 +551,8 @@ export default function ClaimsSubmit() {
       setUploadedFiles(prev => {
         const next = [...prev];
         if (next[index]) {
-          next[index] = { 
-            ...next[index], 
+          next[index] = {
+            ...next[index],
             uploadedUrl: fileUrl,
             documentId: documentId,
             progress: 100,
@@ -573,20 +572,20 @@ export default function ClaimsSubmit() {
       };
     } catch (error: any) {
       console.error(`[CLAIM_DOCUMENT_UPLOAD] Upload failed for file at index ${index}:`, error);
-      
+
       // Update state with error
       setUploadedFiles(prev => {
         const next = [...prev];
         if (next[index]) {
-          next[index] = { 
-            ...next[index], 
+          next[index] = {
+            ...next[index],
             uploading: false,
             error: error?.message || 'Upload failed'
           };
         }
         return next;
       });
-      
+
       toast.error(`Failed to upload ${fileObj.name}: ${error?.message || 'Upload failed'}`);
       throw error;
     }
@@ -595,7 +594,7 @@ export default function ClaimsSubmit() {
   // Upload all files (can be called before or after claim creation)
   const uploadAllFiles = async (claimId?: string | number) => {
     console.log(`[CLAIM_DOCUMENT_UPLOAD] Starting upload for ${uploadedFiles.length} files with claimId: ${claimId}`);
-    
+
     const uploadPromises = uploadedFiles.map((fileObj, index) => {
       // Skip if already uploaded successfully
       if (fileObj.uploadedUrl && !fileObj.error) {
@@ -607,7 +606,7 @@ export default function ClaimsSubmit() {
           category: fileObj.category
         });
       }
-      
+
       // Upload file with error handling
       return uploadFileAtIndex(index, claimId)
         .then((res) => {
@@ -631,10 +630,10 @@ export default function ClaimsSubmit() {
     try {
       // Use Promise.allSettled to get all results (success and failures)
       const results = await Promise.allSettled(uploadPromises);
-      
+
       const successful: any[] = [];
       const failed: any[] = [];
-      
+
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           successful.push(result.value);
@@ -646,16 +645,16 @@ export default function ClaimsSubmit() {
           });
         }
       });
-      
+
       console.log(`[CLAIM_DOCUMENT_UPLOAD] Upload summary: ${successful.length} succeeded, ${failed.length} failed`);
-      
+
       if (failed.length > 0) {
         console.error('[CLAIM_DOCUMENT_UPLOAD] Failed uploads:', failed);
         // Show specific errors for failed uploads
         const errorMessages = failed.map(f => `${f.fileName}: ${f.error?.message || 'Unknown error'}`).join(', ');
         throw new Error(`Some documents failed to upload: ${errorMessages}`);
       }
-      
+
       return successful;
     } catch (error) {
       console.error('[CLAIM_DOCUMENT_UPLOAD] Upload process failed:', error);
@@ -688,14 +687,11 @@ export default function ClaimsSubmit() {
     } else if (claimType === 'life') {
       return [
         { id: 'death-certificate', name: 'Death Certificate', required: true },
-        { id: 'claim-form', name: 'Death Claim Form', required: true },
-        { id: 'policy-document', name: 'Original Policy Document', required: true },
         { id: 'claimant-id', name: 'Claimant ID Proof', required: true },
         { id: 'claimant-address', name: 'Address Proof', required: true },
         { id: 'medical-records', name: 'Medical Records (if illness)', required: false },
         { id: 'fir-copy', name: 'FIR Copy (if accidental)', required: false },
         { id: 'post-mortem', name: 'Post Mortem Report (if applicable)', required: false },
-        { id: 'nominee-proof', name: 'Nominee Relationship Proof', required: true },
         { id: 'bank-details', name: 'Cancelled Cheque/Bank Statement', required: true }
       ];
     } else if (claimType === 'car') {
@@ -720,7 +716,7 @@ export default function ClaimsSubmit() {
       toast.error('Please select claim type and policy');
       return;
     }
-    
+
     if (step === 3) {
       if (!formData.incidentDate) {
         toast.error('Please provide incident date');
@@ -739,37 +735,37 @@ export default function ClaimsSubmit() {
         return;
       }
     }
-    
+
     if (step === 4) {
       // Pre-step validation: Check if required documents are uploaded
       const requiredDocs = getRequiredDocuments().filter(d => d.required);
       const uploadedCategories = new Set(uploadedFiles.map(f => f.category));
       const missingDocs = requiredDocs.filter(d => !uploadedCategories.has(d.id));
-      
+
       if (missingDocs.length > 0) {
         // Show which documents are missing with upload status
         const uploadedCount = uploadedFiles.filter(f => f.uploadedUrl && !f.error).length;
         const failedCount = uploadedFiles.filter(f => f.error).length;
-        
+
         console.warn('[CLAIM_SUBMIT] Step 4 validation: Missing required documents');
         console.warn('[CLAIM_SUBMIT] Uploaded:', uploadedCount, 'Failed:', failedCount, 'Missing:', missingDocs.length);
-        
+
         const errorMessage = `Please upload required documents before proceeding:\n\n` +
           `Missing: ${missingDocs.map(d => d.name).join(', ')}\n\n` +
           `Status: ${uploadedCount} uploaded, ${failedCount} failed`;
-        
+
         toast.error(errorMessage, { duration: 5000 });
         return;
       }
     }
-    
+
     if (step === 5) {
       if (!formData.claimantName || !formData.claimantPhone || !formData.claimantEmail) {
         toast.error('Please fill all required fields');
         return;
       }
     }
-    
+
     if (step === 6) {
       if (!formData.accountNumber || !formData.ifscCode || !formData.accountHolderName) {
         toast.error('Please provide complete bank details');
@@ -780,7 +776,7 @@ export default function ClaimsSubmit() {
         return;
       }
     }
-    
+
     setStep(step + 1);
   };
 
@@ -800,76 +796,78 @@ export default function ClaimsSubmit() {
     const requiredDocs = getRequiredDocuments().filter(d => d.required);
     const uploadedCategories = new Set(uploadedFiles.map(f => f.category));
     const missingRequiredDocs = requiredDocs.filter(d => !uploadedCategories.has(d.id));
-    
+
     if (missingRequiredDocs.length > 0) {
       // Show detailed error with upload status for each document
       const uploadedFilesList = uploadedFiles
         .filter(f => f.category && f.uploadedUrl)
         .map(f => ({ category: f.category, name: f.name, status: f.error ? 'Failed' : 'Uploaded' }));
-      
+
       const missingDocNames = missingRequiredDocs.map(d => d.name);
-      
+
       console.warn('[CLAIM_SUBMIT] Pre-submit validation: Missing required documents');
       console.warn('[CLAIM_SUBMIT] Required:', requiredDocs.map(d => ({ id: d.id, name: d.name })));
       console.warn('[CLAIM_SUBMIT] Uploaded:', uploadedFilesList);
       console.warn('[CLAIM_SUBMIT] Missing:', missingDocNames);
-      
+
       const errorMessage = `Please upload all required documents:\n\n` +
         `Missing: ${missingDocNames.join(', ')}\n\n` +
         `Uploaded: ${uploadedFilesList.length} document(s)\n` +
         `Please upload the missing documents before submitting.`;
-      
+
       toast.error(errorMessage, { duration: 6000 });
       return;
     }
 
     setIsSubmitting(true);
-    
+
     // Declare applicationId at function scope so it's available in catch block
     let applicationId: string | undefined;
 
     try {
       // Get selected policy details from real policies
       const filteredPolicies = getPoliciesByType(claimType);
-      const selectedPolicyObj = filteredPolicies.find(p => 
+      const selectedPolicyObj = filteredPolicies.find(p =>
         String(p.policyId || p.id) === String(formData.selectedPolicy)
       );
-      
+
       if (!selectedPolicyObj) {
         toast.error('Selected policy not found. Please select a valid policy.');
         setIsSubmitting(false);
         return;
       }
-      
+
       // Extract the actual policy ID from backend response (policyId is the primary field)
       const actualPolicyId = selectedPolicyObj.policyId || selectedPolicyObj.id;
-      
+
       if (!actualPolicyId) {
         toast.error('Invalid policy ID. Please select a valid policy.');
         setIsSubmitting(false);
         return;
       }
-      
+
       const selectedPolicy = mapPolicyToUI(selectedPolicyObj);
-      
+
       console.log('[CLAIM_SUBMIT] Selected policy:', {
         policyId: actualPolicyId,
         policyNumber: selectedPolicy.policyNumber,
         planName: selectedPolicy.name
       });
-      
+
       // Build payload structure
       const payload: any = {
         user_id: user?.id || localStorage.getItem('userId'),
         userId: user?.id || localStorage.getItem('userId'), // Support both formats
         claim_type: claimType,
         policy_id: String(actualPolicyId), // Use actual policy ID from backend (policyId field)
+        policyNumber: selectedPolicy?.policyNumber || selectedPolicyObj.policyNumber || null,
+        insurance_application_id: selectedPolicyObj.applicationId, // Pre-linked ID from Policy
         status: 'submitted',
-        
+
         // Intimation details
         intimation_date: formData.intimationDate,
         intimation_time: formData.intimationTime,
-        
+
         // Incident details
         incident_details: {
           incident_date: formData.incidentDate,
@@ -877,7 +875,7 @@ export default function ClaimsSubmit() {
           incident_location: formData.incidentLocation,
           incident_description: formData.incidentDescription
         },
-        
+
         // Claimant information
         claimant_info: {
           name: formData.claimantName,
@@ -887,7 +885,7 @@ export default function ClaimsSubmit() {
           city: formData.claimantCity,
           pincode: formData.claimantPincode
         },
-        
+
         // Bank details
         bank_details: {
           account_holder_name: formData.accountHolderName,
@@ -897,7 +895,7 @@ export default function ClaimsSubmit() {
           branch_name: formData.branchName,
           account_type: formData.accountType
         },
-        
+
         // Type-specific details
         ...(claimType === 'health' && {
           hospitalization_details: {
@@ -918,7 +916,7 @@ export default function ClaimsSubmit() {
             patient_gender: formData.patientGender
           }
         }),
-        
+
         ...(claimType === 'car' && {
           accident_details: {
             accident_type: formData.accidentType,
@@ -936,7 +934,7 @@ export default function ClaimsSubmit() {
             driver_relation: formData.driverRelation
           }
         }),
-        
+
         ...(claimType === 'life' && {
           death_details: {
             deceased_name: formData.deceasedName,
@@ -951,13 +949,13 @@ export default function ClaimsSubmit() {
             claimant_relation: formData.claimantRelation
           }
         })
-        
+
         // Documents will be added after upload (see below)
       };
 
       // Step 1: Create claim application first (to get application ID)
       console.log('[CLAIM_SUBMIT] Creating claim application...');
-      
+
       try {
         const response = await createClaimApplication(payload);
         applicationId = response?.id;
@@ -983,14 +981,14 @@ export default function ClaimsSubmit() {
 
       if (uploadedFiles.length > 0) {
         console.log(`[CLAIM_SUBMIT] Uploading ${uploadedFiles.length} document(s) with claimId: ${applicationId}...`);
-        
+
         try {
           // Upload all files with the claim ID
           const uploadResults = await uploadAllFiles(applicationId);
-          
+
           console.log(`[CLAIM_SUBMIT] Upload results:`, uploadResults);
           console.log(`[CLAIM_SUBMIT] Total results: ${uploadResults.length}, Expected: ${uploadedFiles.length}`);
-          
+
           // Map upload results to document format with better error handling
           uploadedDocs = uploadResults
             .filter(result => {
@@ -1006,11 +1004,11 @@ export default function ClaimsSubmit() {
             })
             .map(result => {
               // Get category from uploadedFiles state (it's stored there)
-              const fileObj = uploadedFiles.find(f => 
+              const fileObj = uploadedFiles.find(f =>
                 f.uploadedUrl === (result.fileUrl || result.fileurl) ||
                 f.documentId === (result.documentId || result.document_id)
               );
-              
+
               const doc = {
                 filename: result.fileName || result.filename || 'unknown',
                 url: result.fileUrl || result.fileurl || '',
@@ -1018,26 +1016,26 @@ export default function ClaimsSubmit() {
                 docType: 'claim_document',
                 category: fileObj?.category || result.category || 'other'  // Use category from fileObj if available
               };
-              
+
               console.log(`[CLAIM_SUBMIT] Mapped document:`, doc);
               console.log(`[CLAIM_SUBMIT]   Category source: ${fileObj?.category ? 'fileObj' : 'result'}`);
-              
+
               return doc;
             });
 
           console.log(`[CLAIM_SUBMIT] Successfully uploaded ${uploadedDocs.length}/${uploadedFiles.length} documents`);
           console.log(`[CLAIM_SUBMIT] Uploaded categories:`, Array.from(new Set(uploadedDocs.map(d => d.category))));
           console.log(`[CLAIM_SUBMIT] Required document IDs:`, requiredDocs.map(d => d.id));
-          
+
           // Validate that all required documents uploaded successfully
           const uploadedCategories = new Set(uploadedDocs.map(d => d.category));
           const missingRequiredUploads = requiredDocs.filter(d => !uploadedCategories.has(d.id));
-          
+
           if (missingRequiredUploads.length > 0) {
             // Create detailed error message with upload status
             const uploadedFileNames = uploadedDocs.map(d => d.filename).filter(Boolean);
             const missingDocNames = missingRequiredUploads.map(d => d.name);
-            
+
             console.error('[CLAIM_SUBMIT] Required documents validation failed');
             console.error('[CLAIM_SUBMIT] Uploaded categories:', Array.from(uploadedCategories));
             console.error('[CLAIM_SUBMIT] Required document IDs:', requiredDocs.map(d => d.id));
@@ -1050,13 +1048,13 @@ export default function ClaimsSubmit() {
               uploadedCategories: Array.from(uploadedCategories),
               requiredCategories: requiredDocs.map(d => d.id)
             });
-            
+
             // Show detailed error with upload status
             const errorMessage = `Required documents missing or failed to upload:\n\n` +
               `Missing: ${missingDocNames.join(', ')}\n\n` +
               `Uploaded: ${uploadedFileNames.length} file(s)\n` +
               `Please ensure all required documents are uploaded before submitting.`;
-            
+
             toast.error(errorMessage, { duration: 8000 });
             setIsSubmitting(false);
             return; // Stop submission if required documents failed
@@ -1084,40 +1082,40 @@ export default function ClaimsSubmit() {
           docType: d.docType,
           category: d.category
         })));
-        
+
         // Verify all documents have required fields
-        const documentsWithMissingFields = uploadedDocs.filter(doc => 
+        const documentsWithMissingFields = uploadedDocs.filter(doc =>
           !doc.filename || !doc.url || !doc.docType || !doc.category
         );
-        
+
         if (documentsWithMissingFields.length > 0) {
           console.warn('[CLAIM_SUBMIT] ⚠️  Some documents missing required fields:', documentsWithMissingFields);
         }
-        
+
         // Verify URLs are Azure Blob Storage URLs
-        const nonAzureUrls = uploadedDocs.filter(doc => 
+        const nonAzureUrls = uploadedDocs.filter(doc =>
           doc.url && !doc.url.includes('blob.core.windows.net')
         );
-        
+
         if (nonAzureUrls.length > 0) {
           console.warn('[CLAIM_SUBMIT] ⚠️  Some documents do not have Azure URLs:', nonAzureUrls.map(d => d.filename));
         } else {
           console.log('[CLAIM_SUBMIT] ✅ All documents have Azure Blob Storage URLs');
         }
-        
+
         try {
           const updatePayload = {
             documents: uploadedDocs,
             status: 'submitted' // Ensure status is set
           };
-          
+
           console.log('[CLAIM_SUBMIT] Sending update payload to MongoDB...');
           const updateResponse = await updateClaimApplication(applicationId, updatePayload);
-          
+
           console.log('[CLAIM_SUBMIT] ✅ Claim application updated with documents');
           console.log('[CLAIM_SUBMIT] Update response:', updateResponse);
           console.log(`[CLAIM_SUBMIT] Saved ${uploadedDocs.length} document(s) to MongoDB`);
-          
+
           // Log each document that was saved
           uploadedDocs.forEach((doc, idx) => {
             console.log(`[CLAIM_SUBMIT] Document ${idx + 1} saved:`, {
@@ -1128,7 +1126,7 @@ export default function ClaimsSubmit() {
               isAzureUrl: doc.url.includes('blob.core.windows.net')
             });
           });
-          
+
         } catch (updateError: any) {
           console.error('[CLAIM_SUBMIT] ❌ Failed to update claim application with documents:', updateError);
           console.error('[CLAIM_SUBMIT] Error details:', {
@@ -1148,17 +1146,17 @@ export default function ClaimsSubmit() {
       console.log('[CLAIM_SUBMIT] Application ID:', applicationId);
       console.log('[CLAIM_SUBMIT] Claim Type:', claimType);
       console.log('[CLAIM_SUBMIT] Selected Policy:', selectedPolicy);
-      
+
       // Set claim number before navigating to step 8
       setClaimNumber(applicationId); // Use application ID as claim number
-      
+
       // Ensure step 8 is reached - use setTimeout to ensure state updates are applied
       setTimeout(() => {
         console.log('[CLAIM_SUBMIT] Setting step to 8');
         setStep(8); // Confirmation step
         toast.success('Claim submitted successfully! Your claim is submitted and is in process.');
       }, 100);
-      
+
     } catch (error: any) {
       console.error('[CLAIM_SUBMIT] ❌ Error submitting claim:', error);
       console.error('[CLAIM_SUBMIT] Error details:', {
@@ -1166,7 +1164,7 @@ export default function ClaimsSubmit() {
         stack: error?.stack,
         name: error?.name
       });
-      
+
       // Even on error, if we have an applicationId, show success page
       // This handles cases where claim was created but something else failed
       if (applicationId) {
@@ -1186,7 +1184,7 @@ export default function ClaimsSubmit() {
 
   // Get selected policy from real policies for display
   const filteredPolicies = claimType ? getPoliciesByType(claimType) : [];
-  const selectedPolicyObj = filteredPolicies.find(p => 
+  const selectedPolicyObj = filteredPolicies.find(p =>
     String(p.id || p.policyId) === String(formData.selectedPolicy)
   );
   const selectedPolicy = selectedPolicyObj ? mapPolicyToUI(selectedPolicyObj) : null;
@@ -1274,7 +1272,7 @@ export default function ClaimsSubmit() {
                         </div>
 
                         {idx < steps.length - 1 && (
-                          <div 
+                          <div
                             className="absolute top-6 left-1/2 h-0.5 bg-gray-300"
                             style={{
                               width: `calc(100% / ${steps.length})`,
@@ -1341,20 +1339,18 @@ export default function ClaimsSubmit() {
                         return (
                           <Card
                             key={item.type}
-                            className={`cursor-pointer transition-all hover:shadow-xl ${
-                              claimType === item.type ? 'ring-2 ring-blue-600 bg-blue-50' : ''
-                            } ${loadingPolicies ? 'opacity-75 cursor-wait' : ''}`}
+                            className={`cursor-pointer transition-all hover:shadow-xl ${claimType === item.type ? 'ring-2 ring-blue-600 bg-blue-50' : ''
+                              } ${loadingPolicies ? 'opacity-75 cursor-wait' : ''}`}
                             onClick={() => {
                               if (!loadingPolicies) {
                                 setClaimType(item.type as any);
-                                setFormData({...formData, selectedPolicy: ''});
+                                setFormData({ ...formData, selectedPolicy: '' });
                               }
                             }}
                           >
                             <CardContent className="p-6 text-center">
-                              <Icon className={`w-14 h-14 mx-auto mb-3 ${
-                                claimType === item.type ? 'text-blue-600' : 'text-gray-400'
-                              }`} />
+                              <Icon className={`w-14 h-14 mx-auto mb-3 ${claimType === item.type ? 'text-blue-600' : 'text-gray-400'
+                                }`} />
                               <h3 className="text-lg mb-2">{item.label}</h3>
                               <p className="text-sm text-muted-foreground">{item.desc}</p>
                               {claimType === item.type && (
@@ -1425,14 +1421,13 @@ export default function ClaimsSubmit() {
                           getPoliciesByType(claimType).map((policy) => {
                             const uiPolicy = mapPolicyToUI(policy);
                             const policyId = String(policy.id || policy.policyId || '');
-                            
+
                             return (
                               <Card
                                 key={policyId}
-                                className={`cursor-pointer transition-all hover:shadow-lg ${
-                                  formData.selectedPolicy === policyId ? 'ring-2 ring-blue-600 bg-blue-50' : ''
-                                }`}
-                                onClick={() => setFormData({...formData, selectedPolicy: policyId})}
+                                className={`cursor-pointer transition-all hover:shadow-lg ${formData.selectedPolicy === policyId ? 'ring-2 ring-blue-600 bg-blue-50' : ''
+                                  }`}
+                                onClick={() => setFormData({ ...formData, selectedPolicy: policyId })}
                               >
                                 <CardContent className="p-4">
                                   <div className="flex items-start justify-between">
@@ -1490,7 +1485,7 @@ export default function ClaimsSubmit() {
                         <Input
                           type="date"
                           value={formData.intimationDate}
-                          onChange={(e) => setFormData({...formData, intimationDate: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, intimationDate: e.target.value })}
                           max={new Date().toISOString().split('T')[0]}
                         />
                       </div>
@@ -1499,7 +1494,7 @@ export default function ClaimsSubmit() {
                         <Input
                           type="time"
                           value={formData.intimationTime}
-                          onChange={(e) => setFormData({...formData, intimationTime: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, intimationTime: e.target.value })}
                         />
                       </div>
                     </div>
@@ -1507,7 +1502,7 @@ export default function ClaimsSubmit() {
                     {claimType === 'health' && (
                       <div className="space-y-2">
                         <Label>Claim Category *</Label>
-                        <RadioGroup value={formData.claimCategory} onValueChange={(value) => setFormData({...formData, claimCategory: value})}>
+                        <RadioGroup value={formData.claimCategory} onValueChange={(value) => setFormData({ ...formData, claimCategory: value })}>
                           <div className="grid grid-cols-2 gap-4">
                             <Card className={`cursor-pointer ${formData.claimCategory === 'cashless' ? 'ring-2 ring-blue-600' : ''}`}>
                               <CardContent className="p-4">
@@ -1582,7 +1577,7 @@ export default function ClaimsSubmit() {
                         <Input
                           type="date"
                           value={formData.incidentDate}
-                          onChange={(e) => setFormData({...formData, incidentDate: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, incidentDate: e.target.value })}
                           max={new Date().toISOString().split('T')[0]}
                         />
                       </div>
@@ -1591,7 +1586,7 @@ export default function ClaimsSubmit() {
                         <Input
                           type="time"
                           value={formData.incidentTime}
-                          onChange={(e) => setFormData({...formData, incidentTime: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, incidentTime: e.target.value })}
                         />
                       </div>
                     </div>
@@ -1604,7 +1599,7 @@ export default function ClaimsSubmit() {
                           <Input
                             placeholder="Enter hospital name"
                             value={formData.hospitalName}
-                            onChange={(e) => setFormData({...formData, hospitalName: e.target.value})}
+                            onChange={(e) => setFormData({ ...formData, hospitalName: e.target.value })}
                           />
                         </div>
 
@@ -1614,12 +1609,12 @@ export default function ClaimsSubmit() {
                             <Input
                               placeholder="Enter city"
                               value={formData.hospitalCity}
-                              onChange={(e) => setFormData({...formData, hospitalCity: e.target.value})}
+                              onChange={(e) => setFormData({ ...formData, hospitalCity: e.target.value })}
                             />
                           </div>
                           <div className="space-y-2">
                             <Label>Hospital Type</Label>
-                            <Select value={formData.hospitalType} onValueChange={(value) => setFormData({...formData, hospitalType: value})}>
+                            <Select value={formData.hospitalType} onValueChange={(value) => setFormData({ ...formData, hospitalType: value })}>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select type" />
                               </SelectTrigger>
@@ -1634,7 +1629,7 @@ export default function ClaimsSubmit() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label>Treatment Type *</Label>
-                            <Select value={formData.treatmentType} onValueChange={(value) => setFormData({...formData, treatmentType: value})}>
+                            <Select value={formData.treatmentType} onValueChange={(value) => setFormData({ ...formData, treatmentType: value })}>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select type" />
                               </SelectTrigger>
@@ -1649,7 +1644,7 @@ export default function ClaimsSubmit() {
                           </div>
                           <div className="space-y-2">
                             <Label>Room Type</Label>
-                            <Select value={formData.roomType} onValueChange={(value) => setFormData({...formData, roomType: value})}>
+                            <Select value={formData.roomType} onValueChange={(value) => setFormData({ ...formData, roomType: value })}>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select room type" />
                               </SelectTrigger>
@@ -1669,7 +1664,7 @@ export default function ClaimsSubmit() {
                           <Textarea
                             placeholder="Describe the illness or injury"
                             value={formData.ailment}
-                            onChange={(e) => setFormData({...formData, ailment: e.target.value})}
+                            onChange={(e) => setFormData({ ...formData, ailment: e.target.value })}
                             rows={3}
                           />
                         </div>
@@ -1680,7 +1675,7 @@ export default function ClaimsSubmit() {
                             <Input
                               type="date"
                               value={formData.dischargeDate}
-                              onChange={(e) => setFormData({...formData, dischargeDate: e.target.value})}
+                              onChange={(e) => setFormData({ ...formData, dischargeDate: e.target.value })}
                             />
                           </div>
                           <div className="space-y-2">
@@ -1689,7 +1684,7 @@ export default function ClaimsSubmit() {
                               type="number"
                               placeholder="Estimated treatment cost"
                               value={formData.estimatedAmount}
-                              onChange={(e) => setFormData({...formData, estimatedAmount: e.target.value})}
+                              onChange={(e) => setFormData({ ...formData, estimatedAmount: e.target.value })}
                             />
                           </div>
                         </div>
@@ -1699,7 +1694,7 @@ export default function ClaimsSubmit() {
                           <Input
                             placeholder="Doctor's name"
                             value={formData.doctorName}
-                            onChange={(e) => setFormData({...formData, doctorName: e.target.value})}
+                            onChange={(e) => setFormData({ ...formData, doctorName: e.target.value })}
                           />
                         </div>
                       </>
@@ -1710,7 +1705,7 @@ export default function ClaimsSubmit() {
                       <>
                         <div className="space-y-2">
                           <Label>Accident Type *</Label>
-                          <Select value={formData.accidentType} onValueChange={(value) => setFormData({...formData, accidentType: value})}>
+                          <Select value={formData.accidentType} onValueChange={(value) => setFormData({ ...formData, accidentType: value })}>
                             <SelectTrigger>
                               <SelectValue placeholder="Select accident type" />
                             </SelectTrigger>
@@ -1731,14 +1726,14 @@ export default function ClaimsSubmit() {
                           <Textarea
                             placeholder="Enter complete address where accident occurred"
                             value={formData.incidentLocation}
-                            onChange={(e) => setFormData({...formData, incidentLocation: e.target.value})}
+                            onChange={(e) => setFormData({ ...formData, incidentLocation: e.target.value })}
                             rows={2}
                           />
                         </div>
 
                         <div className="space-y-2">
                           <Label>Was police complaint filed? *</Label>
-                          <RadioGroup value={formData.policeComplaintFiled} onValueChange={(value) => setFormData({...formData, policeComplaintFiled: value})}>
+                          <RadioGroup value={formData.policeComplaintFiled} onValueChange={(value) => setFormData({ ...formData, policeComplaintFiled: value })}>
                             <div className="flex gap-4">
                               <div className="flex items-center space-x-2">
                                 <RadioGroupItem value="yes" id="police-yes" />
@@ -1764,7 +1759,7 @@ export default function ClaimsSubmit() {
                                 <Input
                                   placeholder="Police station"
                                   value={formData.policeStation}
-                                  onChange={(e) => setFormData({...formData, policeStation: e.target.value})}
+                                  onChange={(e) => setFormData({ ...formData, policeStation: e.target.value })}
                                 />
                               </div>
                               <div className="space-y-2">
@@ -1772,7 +1767,7 @@ export default function ClaimsSubmit() {
                                 <Input
                                   placeholder="FIR number"
                                   value={formData.firNumber}
-                                  onChange={(e) => setFormData({...formData, firNumber: e.target.value})}
+                                  onChange={(e) => setFormData({ ...formData, firNumber: e.target.value })}
                                 />
                               </div>
                             </div>
@@ -1781,7 +1776,7 @@ export default function ClaimsSubmit() {
 
                         <div className="space-y-2">
                           <Label>Third party involved? *</Label>
-                          <RadioGroup value={formData.thirdPartyInvolved} onValueChange={(value) => setFormData({...formData, thirdPartyInvolved: value})}>
+                          <RadioGroup value={formData.thirdPartyInvolved} onValueChange={(value) => setFormData({ ...formData, thirdPartyInvolved: value })}>
                             <div className="flex gap-4">
                               <div className="flex items-center space-x-2">
                                 <RadioGroupItem value="yes" id="third-yes" />
@@ -1805,7 +1800,7 @@ export default function ClaimsSubmit() {
                             <Textarea
                               placeholder="Name, contact, vehicle details of third party"
                               value={formData.thirdPartyDetails}
-                              onChange={(e) => setFormData({...formData, thirdPartyDetails: e.target.value})}
+                              onChange={(e) => setFormData({ ...formData, thirdPartyDetails: e.target.value })}
                               rows={3}
                             />
                           </motion.div>
@@ -1817,7 +1812,7 @@ export default function ClaimsSubmit() {
                             <Input
                               placeholder="Name of driver at time of accident"
                               value={formData.driverName}
-                              onChange={(e) => setFormData({...formData, driverName: e.target.value})}
+                              onChange={(e) => setFormData({ ...formData, driverName: e.target.value })}
                             />
                           </div>
                           <div className="space-y-2">
@@ -1825,14 +1820,14 @@ export default function ClaimsSubmit() {
                             <Input
                               placeholder="DL number"
                               value={formData.driverLicenseNumber}
-                              onChange={(e) => setFormData({...formData, driverLicenseNumber: e.target.value})}
+                              onChange={(e) => setFormData({ ...formData, driverLicenseNumber: e.target.value })}
                             />
                           </div>
                         </div>
 
                         <div className="space-y-2">
                           <Label>Vehicle Condition</Label>
-                          <Select value={formData.vehicleCondition} onValueChange={(value) => setFormData({...formData, vehicleCondition: value})}>
+                          <Select value={formData.vehicleCondition} onValueChange={(value) => setFormData({ ...formData, vehicleCondition: value })}>
                             <SelectTrigger>
                               <SelectValue placeholder="Select condition" />
                             </SelectTrigger>
@@ -1850,7 +1845,7 @@ export default function ClaimsSubmit() {
                             type="number"
                             placeholder="Approximate repair cost"
                             value={formData.estimatedRepairCost}
-                            onChange={(e) => setFormData({...formData, estimatedRepairCost: e.target.value})}
+                            onChange={(e) => setFormData({ ...formData, estimatedRepairCost: e.target.value })}
                           />
                         </div>
                       </>
@@ -1864,7 +1859,7 @@ export default function ClaimsSubmit() {
                           <Input
                             placeholder="Full name of the deceased"
                             value={formData.deceasedName}
-                            onChange={(e) => setFormData({...formData, deceasedName: e.target.value})}
+                            onChange={(e) => setFormData({ ...formData, deceasedName: e.target.value })}
                           />
                         </div>
 
@@ -1874,7 +1869,7 @@ export default function ClaimsSubmit() {
                             <Input
                               type="date"
                               value={formData.deceasedDOB}
-                              onChange={(e) => setFormData({...formData, deceasedDOB: e.target.value})}
+                              onChange={(e) => setFormData({ ...formData, deceasedDOB: e.target.value })}
                             />
                           </div>
                           <div className="space-y-2">
@@ -1882,7 +1877,7 @@ export default function ClaimsSubmit() {
                             <Input
                               type="date"
                               value={formData.dateOfDeath}
-                              onChange={(e) => setFormData({...formData, dateOfDeath: e.target.value})}
+                              onChange={(e) => setFormData({ ...formData, dateOfDeath: e.target.value })}
                               max={new Date().toISOString().split('T')[0]}
                             />
                           </div>
@@ -1891,7 +1886,7 @@ export default function ClaimsSubmit() {
                             <Input
                               type="time"
                               value={formData.timeOfDeath}
-                              onChange={(e) => setFormData({...formData, timeOfDeath: e.target.value})}
+                              onChange={(e) => setFormData({ ...formData, timeOfDeath: e.target.value })}
                             />
                           </div>
                         </div>
@@ -1901,14 +1896,14 @@ export default function ClaimsSubmit() {
                           <Textarea
                             placeholder="Enter complete address"
                             value={formData.placeOfDeath}
-                            onChange={(e) => setFormData({...formData, placeOfDeath: e.target.value})}
+                            onChange={(e) => setFormData({ ...formData, placeOfDeath: e.target.value })}
                             rows={2}
                           />
                         </div>
 
                         <div className="space-y-2">
                           <Label>Type of Death *</Label>
-                          <Select value={formData.deathType} onValueChange={(value) => setFormData({...formData, deathType: value})}>
+                          <Select value={formData.deathType} onValueChange={(value) => setFormData({ ...formData, deathType: value })}>
                             <SelectTrigger>
                               <SelectValue placeholder="Select type" />
                             </SelectTrigger>
@@ -1926,7 +1921,7 @@ export default function ClaimsSubmit() {
                           <Textarea
                             placeholder="Describe the cause of death in detail"
                             value={formData.causeOfDeath}
-                            onChange={(e) => setFormData({...formData, causeOfDeath: e.target.value})}
+                            onChange={(e) => setFormData({ ...formData, causeOfDeath: e.target.value })}
                             rows={4}
                           />
                         </div>
@@ -1937,14 +1932,14 @@ export default function ClaimsSubmit() {
                             <Input
                               placeholder="Hospital where treatment was given"
                               value={formData.hospitalNameDeath}
-                              onChange={(e) => setFormData({...formData, hospitalNameDeath: e.target.value})}
+                              onChange={(e) => setFormData({ ...formData, hospitalNameDeath: e.target.value })}
                             />
                           </div>
                         )}
 
                         <div className="space-y-2">
                           <Label>Claimant's Relation to Deceased *</Label>
-                          <Select value={formData.claimantRelation} onValueChange={(value) => setFormData({...formData, claimantRelation: value})}>
+                          <Select value={formData.claimantRelation} onValueChange={(value) => setFormData({ ...formData, claimantRelation: value })}>
                             <SelectTrigger>
                               <SelectValue placeholder="Select relation" />
                             </SelectTrigger>
@@ -1966,7 +1961,7 @@ export default function ClaimsSubmit() {
                       <Textarea
                         placeholder="Any other relevant details"
                         value={formData.incidentDescription}
-                        onChange={(e) => setFormData({...formData, incidentDescription: e.target.value})}
+                        onChange={(e) => setFormData({ ...formData, incidentDescription: e.target.value })}
                         rows={3}
                       />
                     </div>
@@ -2046,29 +2041,29 @@ export default function ClaimsSubmit() {
                                   const isSuccess = fileObj.uploadedUrl && !fileObj.error;
                                   const isError = fileObj.error && !fileObj.uploading;
                                   const isPending = !isUploading && !isSuccess && !isError;
-                                  
+
                                   // Dynamic styling based on status
-                                  const bgColor = isError 
-                                    ? 'bg-red-50 border-red-200' 
-                                    : isSuccess 
-                                    ? 'bg-green-50 border-green-200' 
-                                    : isUploading
-                                    ? 'bg-blue-50 border-blue-200'
-                                    : 'bg-gray-50 border-gray-200';
-                                  
-                                  const iconColor = isError 
-                                    ? 'text-red-600' 
-                                    : isSuccess 
-                                    ? 'text-green-600' 
-                                    : isUploading
-                                    ? 'text-blue-600'
-                                    : 'text-gray-400';
-                                  
-                                  const progressColor = isError 
-                                    ? 'bg-red-500' 
-                                    : isSuccess 
-                                    ? 'bg-green-500' 
-                                    : 'bg-blue-500';
+                                  const bgColor = isError
+                                    ? 'bg-red-50 border-red-200'
+                                    : isSuccess
+                                      ? 'bg-green-50 border-green-200'
+                                      : isUploading
+                                        ? 'bg-blue-50 border-blue-200'
+                                        : 'bg-gray-50 border-gray-200';
+
+                                  const iconColor = isError
+                                    ? 'text-red-600'
+                                    : isSuccess
+                                      ? 'text-green-600'
+                                      : isUploading
+                                        ? 'text-blue-600'
+                                        : 'text-gray-400';
+
+                                  const progressColor = isError
+                                    ? 'bg-red-500'
+                                    : isSuccess
+                                      ? 'bg-green-500'
+                                      : 'bg-blue-500';
 
                                   const progress = fileObj.progress || 0;
 
@@ -2086,7 +2081,7 @@ export default function ClaimsSubmit() {
                                           <FileCheck className="w-5 h-5" />
                                         )}
                                       </div>
-                                      
+
                                       <div className="flex-1 min-w-0">
                                         <div className="flex items-center justify-between gap-2 mb-2">
                                           <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -2122,9 +2117,9 @@ export default function ClaimsSubmit() {
                                         {(isUploading || isSuccess || isError) && (
                                           <div className="mt-2">
                                             <div className="w-full bg-gray-200 h-2 rounded overflow-hidden">
-                                              <div 
-                                                className={`h-2 transition-all duration-300 ${progressColor}`} 
-                                                style={{ width: `${progress}%` }} 
+                                              <div
+                                                className={`h-2 transition-all duration-300 ${progressColor}`}
+                                                style={{ width: `${progress}%` }}
                                               />
                                             </div>
                                             <div className="flex items-center justify-between text-xs mt-1">
@@ -2141,19 +2136,18 @@ export default function ClaimsSubmit() {
                                         )}
 
                                         {/* Status text - Show for all states */}
-                                        <p className={`text-xs mt-1 ${
-                                          isUploading ? 'text-blue-600 font-medium' : 
-                                          isSuccess ? 'text-green-600 font-medium' : 
-                                          isError ? 'text-red-600 font-medium' : 
-                                          'text-gray-500'
-                                        }`}>
-                                          {isUploading ? `📤 Uploading to Azure... ${progress}%` : 
-                                           isSuccess ? '✅ Uploaded to Azure successfully' : 
-                                           isError ? `❌ Upload failed: ${fileObj.error}` : 
-                                           '📄 Ready to upload'}
+                                        <p className={`text-xs mt-1 ${isUploading ? 'text-blue-600 font-medium' :
+                                          isSuccess ? 'text-green-600 font-medium' :
+                                            isError ? 'text-red-600 font-medium' :
+                                              'text-gray-500'
+                                          }`}>
+                                          {isUploading ? `📤 Uploading to Azure... ${progress}%` :
+                                            isSuccess ? '✅ Uploaded to Azure successfully' :
+                                              isError ? `❌ Upload failed: ${fileObj.error}` :
+                                                '📄 Ready to upload'}
                                         </p>
                                       </div>
-                                      
+
                                       {/* Action Button - Show retry for errors */}
                                       {isError && (
                                         <div className="flex flex-col gap-2">
@@ -2205,7 +2199,7 @@ export default function ClaimsSubmit() {
                           <Input
                             placeholder="Full name of patient"
                             value={formData.patientName}
-                            onChange={(e) => setFormData({...formData, patientName: e.target.value})}
+                            onChange={(e) => setFormData({ ...formData, patientName: e.target.value })}
                           />
                         </div>
 
@@ -2216,12 +2210,12 @@ export default function ClaimsSubmit() {
                               type="number"
                               placeholder="Age"
                               value={formData.patientAge}
-                              onChange={(e) => setFormData({...formData, patientAge: e.target.value})}
+                              onChange={(e) => setFormData({ ...formData, patientAge: e.target.value })}
                             />
                           </div>
                           <div className="space-y-2">
                             <Label>Patient Gender *</Label>
-                            <Select value={formData.patientGender} onValueChange={(value) => setFormData({...formData, patientGender: value})}>
+                            <Select value={formData.patientGender} onValueChange={(value) => setFormData({ ...formData, patientGender: value })}>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select gender" />
                               </SelectTrigger>
@@ -2241,7 +2235,7 @@ export default function ClaimsSubmit() {
                       <Input
                         placeholder="Full name"
                         value={formData.claimantName}
-                        onChange={(e) => setFormData({...formData, claimantName: e.target.value})}
+                        onChange={(e) => setFormData({ ...formData, claimantName: e.target.value })}
                       />
                     </div>
 
@@ -2252,7 +2246,7 @@ export default function ClaimsSubmit() {
                           type="tel"
                           placeholder="10-digit mobile number"
                           value={formData.claimantPhone}
-                          onChange={(e) => setFormData({...formData, claimantPhone: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, claimantPhone: e.target.value })}
                           maxLength={10}
                         />
                       </div>
@@ -2262,7 +2256,7 @@ export default function ClaimsSubmit() {
                           type="email"
                           placeholder="your@email.com"
                           value={formData.claimantEmail}
-                          onChange={(e) => setFormData({...formData, claimantEmail: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, claimantEmail: e.target.value })}
                         />
                       </div>
                     </div>
@@ -2272,7 +2266,7 @@ export default function ClaimsSubmit() {
                       <Textarea
                         placeholder="Complete address"
                         value={formData.claimantAddress}
-                        onChange={(e) => setFormData({...formData, claimantAddress: e.target.value})}
+                        onChange={(e) => setFormData({ ...formData, claimantAddress: e.target.value })}
                         rows={2}
                       />
                     </div>
@@ -2283,7 +2277,7 @@ export default function ClaimsSubmit() {
                         <Input
                           placeholder="City"
                           value={formData.claimantCity}
-                          onChange={(e) => setFormData({...formData, claimantCity: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, claimantCity: e.target.value })}
                         />
                       </div>
                       <div className="space-y-2">
@@ -2291,7 +2285,7 @@ export default function ClaimsSubmit() {
                         <Input
                           placeholder="6-digit pincode"
                           value={formData.claimantPincode}
-                          onChange={(e) => setFormData({...formData, claimantPincode: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, claimantPincode: e.target.value })}
                           maxLength={6}
                         />
                       </div>
@@ -2322,7 +2316,7 @@ export default function ClaimsSubmit() {
                       <Input
                         placeholder="As per bank records"
                         value={formData.accountHolderName}
-                        onChange={(e) => setFormData({...formData, accountHolderName: e.target.value})}
+                        onChange={(e) => setFormData({ ...formData, accountHolderName: e.target.value })}
                       />
                     </div>
 
@@ -2333,7 +2327,7 @@ export default function ClaimsSubmit() {
                           type="text"
                           placeholder="Enter account number"
                           value={formData.accountNumber}
-                          onChange={(e) => setFormData({...formData, accountNumber: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
                         />
                       </div>
                       <div className="space-y-2">
@@ -2342,7 +2336,7 @@ export default function ClaimsSubmit() {
                           type="text"
                           placeholder="Re-enter account number"
                           value={formData.confirmAccountNumber}
-                          onChange={(e) => setFormData({...formData, confirmAccountNumber: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, confirmAccountNumber: e.target.value })}
                         />
                       </div>
                     </div>
@@ -2353,13 +2347,13 @@ export default function ClaimsSubmit() {
                         <Input
                           placeholder="e.g., SBIN0001234"
                           value={formData.ifscCode}
-                          onChange={(e) => setFormData({...formData, ifscCode: e.target.value.toUpperCase()})}
+                          onChange={(e) => setFormData({ ...formData, ifscCode: e.target.value.toUpperCase() })}
                           className="uppercase"
                         />
                       </div>
                       <div className="space-y-2">
                         <Label>Account Type</Label>
-                        <Select value={formData.accountType} onValueChange={(value) => setFormData({...formData, accountType: value})}>
+                        <Select value={formData.accountType} onValueChange={(value) => setFormData({ ...formData, accountType: value })}>
                           <SelectTrigger>
                             <SelectValue placeholder="Select type" />
                           </SelectTrigger>
@@ -2377,7 +2371,7 @@ export default function ClaimsSubmit() {
                         <Input
                           placeholder="Bank name"
                           value={formData.bankName}
-                          onChange={(e) => setFormData({...formData, bankName: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
                         />
                       </div>
                       <div className="space-y-2">
@@ -2385,7 +2379,7 @@ export default function ClaimsSubmit() {
                         <Input
                           placeholder="Branch name"
                           value={formData.branchName}
-                          onChange={(e) => setFormData({...formData, branchName: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, branchName: e.target.value })}
                         />
                       </div>
                     </div>
@@ -2575,7 +2569,7 @@ export default function ClaimsSubmit() {
                   console.log('[CLAIM_SUCCESS_PAGE] Claim Number:', claimNumber);
                   console.log('[CLAIM_SUCCESS_PAGE] Claim Type:', claimType);
                   console.log('[CLAIM_SUCCESS_PAGE] Selected Policy:', selectedPolicy);
-                  
+
                   return (
                     <motion.div
                       initial={{ scale: 0.9, opacity: 0 }}
@@ -2720,7 +2714,7 @@ export default function ClaimsSubmit() {
               <ArrowLeft className="w-4 h-4 mr-2" />
               Previous
             </Button>
-            
+
             {step < 7 ? (
               <Button
                 onClick={handleNext}

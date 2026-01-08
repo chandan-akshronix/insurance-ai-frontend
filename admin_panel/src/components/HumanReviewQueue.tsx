@@ -30,9 +30,10 @@ export function HumanReviewQueue({ onViewClaim }: HumanReviewQueueProps) {
   useEffect(() => {
     const fetchQueue = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/agent/applications`);
+        const response = await fetch(`${API_BASE_URL}/agent/applications?type=policy`);
         if (!response.ok) throw new Error('Failed to fetch applications');
         const data: ApplicationProcess[] = await response.json();
+
 
         // Filter for items needing review
         const reviewableStatuses = ['escalate_to_senior', 'manual_review', 'pending_review', 'ask_for_document'];
