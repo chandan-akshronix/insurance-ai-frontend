@@ -3,7 +3,7 @@ name: CI - Frontend
 on:
   push:
     branches: [main]
-  
+ 
 
 env:
   REGISTRY: ghcr.io
@@ -22,7 +22,11 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies
+      - name: Install admin_panel dependencies
+        working-directory: ./admin_panel
+        run: npm ci
+
+      - name: Install react-ui-user dependencies
         working-directory: ./react-ui-user
         run: npm ci
 
