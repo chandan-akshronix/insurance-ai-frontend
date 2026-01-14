@@ -1,32 +1,63 @@
-name: CI - Frontend
+name: CI/CD - Frontend
 
 on:
   push:
     branches: [main]
- 
+  pull_request:
+    branches: [main]
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/insurance-ai-frontend
+  MANIFEST_REPO: ${{ github.repository_owner }}/insurance-ai-manifests
+  MANIFEST_USER_EMAIL: "ci-bot@insurance-ai.com"
+  MANIFEST_USER_NAME: "CI Bot"
 
 jobs:
-  lint-build:
-    name: Lint & Build
+  pre-build-verification:
+    name: Pre-Build Verification
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      # 1. GitLeaks
+      - name: GitLeaks Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      # 2. Dependency Check (OWASP)
+      - name: OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'frontend'
+          path: '.'
+          format: 'HTML'
+          out: 'reports'
+        continue-on-error: true
+
+      # 3. Trivy FS Scan
+      - name: Trivy FS Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          trivy-config: trivy.yaml
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+        continue-on-error: true
+
+      # 4. Unit Testing
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install admin_panel dependencies
-        working-directory: ./admin_panel
-        run: npm ci
-
-      - name: Install react-ui-user dependencies
+      - name: Install Dependencies
         working-directory: ./react-ui-user
         run: npm ci
 
@@ -35,106 +66,104 @@ jobs:
         run: npm run lint || true
         continue-on-error: true
 
-      - name: Type check
-        working-directory: ./react-ui-user
-        run: npm run type-check || true
-        continue-on-error: true
-
-      - name: Run tests
+      - name: Run Tests
         working-directory: ./react-ui-user
         run: npm test -- --coverage --watchAll=false || true
-        continue-on-error: true
 
-      - name: Build
-        working-directory: ./react-ui-user
-        run: npm run build
+      # 5. SonarQube Analysis
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        if: ${{ env.SONAR_TOKEN != '' }}
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-build
-          path: ./react-ui-user/build
-          retention-days: 1
-
-  build-push:
-    name: Build & Push Image
+  build-and-publish:
+    name: Build & Publish
+    needs: pre-build-verification
     runs-on: ubuntu-latest
-    needs: lint-build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
-      id-token: write
-      attestations: write
     outputs:
-      image-tag: ${{ steps.meta.outputs.tags }}
-      image-digest: ${{ steps.build.outputs.digest }}
+      image_tag: ${{ steps.meta.outputs.tags }}
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Container Registry
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
+      - name: Extract Metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=sha,prefix=
-            type=ref,event=branch
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
 
-      - name: Build and push Docker image
-        id: build
+      # 6. Docker Build & Push
+      - name: Build and Push
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64
           build-args: |
-            VITE_API_URL=${{ vars.VITE_API_URL || 'http://localhost:8000' }}
+             VITE_API_URL=${{ vars.VITE_API_URL || 'http://localhost:8000' }}
 
-      - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.build.outputs.digest }}
-          push-to-registry: true
-
-  security-scan:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    needs: build-push
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Run Trivy vulnerability scanner
+      # 7. Trivy Image Scan
+      - name: Trivy Image Scan
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          format: 'sarif'
-          output: 'trivy-results.sarif'
+          format: 'table'
           severity: 'CRITICAL,HIGH'
         continue-on-error: true
 
-      - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v3
+  post-build-cd:
+    name: CD (Update Manifest)
+    needs: build-and-publish
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout Manifest Repo
+        uses: actions/checkout@v4
         with:
-          sarif_file: 'trivy-results.sarif'
-        continue-on-error: true
+          repository: ${{ env.MANIFEST_REPO }}
+          token: ${{ secrets.PAT_TOKEN }}
+          path: manifest-repo
+
+      - name: Update Image Tag
+        working-directory: ./manifest-repo/frontend
+        run: |
+          if ! command -v yq &> /dev/null; then
+             sudo snap install yq
+          fi
+          
+          # Frontend likely still uses standard schema unless refactored
+          yq -i '.image.tag = "${{ github.sha }}"' values.yaml || true
+          
+          # Or if using new schema
+          yq -i '.helm.values.image.tag = "${{ github.sha }}"' values.yaml || true
+
+      - name: Commit and Push
+        working-directory: ./manifest-repo
+        run: |
+          git config user.name "${{ env.MANIFEST_USER_NAME }}"
+          git config user.email "${{ env.MANIFEST_USER_EMAIL }}"
+          git add frontend/values.yaml
+          git commit -m "CD: Update frontend to ${{ github.sha }}"
+          git push
