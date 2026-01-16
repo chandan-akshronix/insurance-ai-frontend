@@ -9,7 +9,7 @@ import { Checkbox } from '../ui/checkbox';
 import { Badge } from '../ui/badge';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Alert, AlertDescription } from '../ui/alert';

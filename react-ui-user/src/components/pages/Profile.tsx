@@ -12,7 +12,7 @@ import { Switch } from '../ui/switch';
 import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
 import { useAuth } from '../../contexts/AuthContext';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { motion } from 'motion/react';
 
 interface Policy {

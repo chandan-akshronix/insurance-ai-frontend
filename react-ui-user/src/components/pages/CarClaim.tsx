@@ -10,7 +10,7 @@ import { Badge } from '../ui/badge';
 import { Alert, AlertDescription } from '../ui/alert';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { Separator } from '../ui/separator';
 import { ImageWithFallback } from '../figma/ImageWithFallback';

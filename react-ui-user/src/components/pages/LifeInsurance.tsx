@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
-import { 
-  Upload, FileText, CheckCircle, AlertCircle, Sparkles, Bot, 
-  User, Phone, Shield, Plus, TrendingUp, Heart, Users, Lock, 
-  CreditCard, ArrowRight, ArrowLeft, Edit2, Check, Info, 
+import {
+  Upload, FileText, CheckCircle, AlertCircle, Sparkles, Bot,
+  User, Phone, Shield, Plus, TrendingUp, Heart, Users, Lock,
+  CreditCard, ArrowRight, ArrowLeft, Edit2, Check, Info,
   Clock, Star, Loader2, X, Mail, Home, Calendar, DollarSign,
-  FileCheck, Briefcase, Activity, Umbrella, Download, Share2, 
+  FileCheck, Briefcase, Activity, Umbrella, Download, Share2,
   ChevronRight, Save, Play, Trash2
 } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -87,7 +87,7 @@ export default function LifeInsurance() {
   const [showAIAssistant, setShowAIAssistant] = useState(true);
   const [assistantMessage, setAssistantMessage] = useState('Upload your documents and I\'ll help fill your details automatically!');
   const [policyNumber, setPolicyNumber] = useState('');
-  
+
   const [formData, setFormData] = useState({
     // Auto-filled from documents
     fullName: '',
@@ -97,21 +97,21 @@ export default function LifeInsurance() {
     panNumber: '',
     annualIncome: '',
     occupation: '',
-    
+
     // Contact
     phone: '',
     email: '',
-    
+
     // Coverage
     coverageAmount: 10000000,
     term: 30,
-    
+
     // Riders
     selectedRiders: [] as string[],
-    
+
     // Plan
     selectedPlan: 'smart',
-    
+
     // Health
     weight: '',
     height: '',
@@ -139,16 +139,16 @@ export default function LifeInsurance() {
     familyHistory: false,
     recentAilment: false,
     weightChange: false,
-    
+
     // Nominee
     nomineeName: '',
     nomineeRelation: '',
     nomineeDOB: '',
     nomineeContact: '',
-    
+
     // KYC
     kycVerified: false,
-    
+
     // Payment
     paymentMethod: ''
   });
@@ -214,40 +214,40 @@ export default function LifeInsurance() {
   const uploadFileAtIndex = useCallback(async (index: number) => {
     // Get file from state using functional update to ensure we have latest state
     let fileObj: { file: File; type: string; progress: number; uploading: boolean; error?: string | null; uploadedUrl?: string | null; documentId?: any } | null = null;
-    
+
     setUploadedFiles(prev => {
       fileObj = prev[index] || null;
       return prev; // Don't modify, just read
     });
-    
+
     if (!fileObj) {
       console.warn(`File at index ${index} not found`);
       return null;
     }
-    
+
     // Prevent uploading if already uploading or already uploaded successfully
     if (fileObj.uploading) {
       console.warn(`File at index ${index} is already uploading`);
       return null;
     }
-    
+
     // If already uploaded successfully, don't re-upload unless explicitly retrying
     if (fileObj.uploadedUrl && !fileObj.error) {
       console.log(`File at index ${index} already uploaded successfully`);
       return { fileUrl: fileObj.uploadedUrl, documentId: fileObj.documentId };
     }
-    
+
     const userIdForUpload = user?.id || localStorage.getItem('userId') || '1';
 
     // Mark uploading and clear any previous errors
     setUploadedFiles(prev => {
       const next = [...prev];
       if (next[index]) {
-        next[index] = { 
-          ...next[index], 
-          uploading: true, 
-          progress: 0, 
-          error: null 
+        next[index] = {
+          ...next[index],
+          uploading: true,
+          progress: 0,
+          error: null
         };
       }
       return next;
@@ -255,7 +255,7 @@ export default function LifeInsurance() {
 
     try {
       console.log(`[DOCUMENT_UPLOAD] uploadFileAtIndex - Uploading file at index ${index}:`, fileObj.file.name, 'with documentType:', fileObj.type);
-      
+
       // Add timeout for upload (5 minutes max)
       const uploadPromise = uploadDocument(fileObj.file, fileObj.type, userIdForUpload, undefined, (p) => {
         setUploadedFiles(prev => {
@@ -266,21 +266,21 @@ export default function LifeInsurance() {
           return next;
         });
       });
-      
+
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('Upload timeout: Request took too long')), 5 * 60 * 1000);
       });
-      
+
       const res = await Promise.race([uploadPromise, timeoutPromise]) as any;
 
       setUploadedFiles(prev => {
         const next = [...prev];
         if (next[index]) {
-          next[index] = { 
-            ...next[index], 
-            uploading: false, 
-            progress: 100, 
-            uploadedUrl: res.fileUrl || res.fileurl || null, 
+          next[index] = {
+            ...next[index],
+            uploading: false,
+            progress: 100,
+            uploadedUrl: res.fileUrl || res.fileurl || null,
             documentId: res.documentId || null,
             error: null
           };
@@ -293,7 +293,7 @@ export default function LifeInsurance() {
     } catch (e: any) {
       // Categorize errors for better user feedback
       let errorMessage = 'Upload failed';
-      
+
       if (e?.message) {
         if (e.message.includes('timeout') || e.message.includes('time')) {
           errorMessage = 'Upload timeout: Please check your connection and try again';
@@ -311,20 +311,20 @@ export default function LifeInsurance() {
           errorMessage = e.message;
         }
       }
-      
+
       setUploadedFiles(prev => {
         const next = [...prev];
         if (next[index]) {
-          next[index] = { 
-            ...next[index], 
-            uploading: false, 
+          next[index] = {
+            ...next[index],
+            uploading: false,
             error: errorMessage,
             progress: 0 // Reset progress on error
           };
         }
         return next;
       });
-      
+
       toast.error(`Failed to upload "${fileObj.file.name}": ${errorMessage}`, { duration: 5000 });
       throw e;
     }
@@ -333,78 +333,78 @@ export default function LifeInsurance() {
   // Handle file upload
   const handleFileUpload = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
-    
+
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
     const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
     const ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png'];
-    
+
     // Validate and process files
     const validFiles: File[] = [];
     const invalidFiles: { name: string; reason: string }[] = [];
-    
+
     // Get existing file names to check for duplicates
     setUploadedFiles(prev => {
       const existingNames = new Set(prev.map(f => f.file.name.toLowerCase()));
-      
+
       Array.from(files).forEach(file => {
         // Check for duplicate files
         if (existingNames.has(file.name.toLowerCase())) {
           invalidFiles.push({ name: file.name, reason: 'File already uploaded' });
           return;
         }
-        
+
         // Check if file is empty
         if (file.size === 0) {
           invalidFiles.push({ name: file.name, reason: 'File is empty' });
           return;
         }
-        
+
         // Check file size
         if (file.size > MAX_FILE_SIZE) {
           const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-          invalidFiles.push({ 
-            name: file.name, 
-            reason: `File size (${sizeMB}MB) exceeds 10MB limit` 
+          invalidFiles.push({
+            name: file.name,
+            reason: `File size (${sizeMB}MB) exceeds 10MB limit`
           });
           return;
         }
-        
+
         // Check file type by MIME type
         const hasValidMimeType = ALLOWED_TYPES.includes(file.type);
         // Check file type by extension (fallback for files without MIME type)
-        const hasValidExtension = ALLOWED_EXTENSIONS.some(ext => 
+        const hasValidExtension = ALLOWED_EXTENSIONS.some(ext =>
           file.name.toLowerCase().endsWith(ext)
         );
-        
+
         if (!hasValidMimeType && !hasValidExtension) {
-          invalidFiles.push({ 
-            name: file.name, 
-            reason: 'File type not supported. Only PDF, JPG, PNG allowed' 
+          invalidFiles.push({
+            name: file.name,
+            reason: 'File type not supported. Only PDF, JPG, PNG allowed'
           });
           return;
         }
-        
+
         validFiles.push(file);
         existingNames.add(file.name.toLowerCase());
       });
-      
+
       return prev; // Don't modify, just read
     });
-    
+
     // Show errors for invalid files
     if (invalidFiles.length > 0) {
       invalidFiles.forEach(({ name, reason }) => {
         toast.error(`${name}: ${reason}`, { duration: 4000 });
       });
     }
-    
+
     if (validFiles.length === 0) {
       if (invalidFiles.length > 0) {
         toast.warning('No valid files to upload. Please check file requirements.');
       }
       return;
     }
-    
+
     // Add valid files to state with default type 'kyc_document'
     setUploadedFiles(prev => {
       const startIndex = prev.length;
@@ -417,9 +417,9 @@ export default function LifeInsurance() {
         uploadedUrl: null,
         documentId: null
       }));
-      
+
       const newFiles = [...prev, ...fileArray];
-      
+
       // Automatically start uploading each new file after state update
       // Use queueMicrotask to ensure state is updated before accessing indices
       // Upload files sequentially to avoid overwhelming the server
@@ -432,10 +432,10 @@ export default function LifeInsurance() {
           }, index * 100); // 100ms delay between each upload
         });
       });
-      
+
       return newFiles;
     });
-    
+
     toast.success(`${validFiles.length} file(s) uploading automatically...`);
   }, [user, uploadFileAtIndex]);
 
@@ -444,24 +444,24 @@ export default function LifeInsurance() {
     setUploadedFiles(prev => {
       const next = [...prev];
       if (!next[index]) return prev;
-      
+
       const fileObj = next[index];
       const oldType = fileObj.type;
-      
+
       // Don't allow type change if currently uploading
       if (fileObj.uploading) {
         toast.warning('Cannot change document type while upload is in progress');
         return prev; // Don't modify
       }
-      
+
       // If type hasn't changed, do nothing
       if (oldType === newType) {
         return prev;
       }
-      
+
       // Update the type
       next[index] = { ...next[index], type: newType };
-      
+
       // If file was already uploaded successfully with different type, mark for re-upload
       if (fileObj.uploadedUrl && oldType !== newType) {
         // Clear uploaded status to allow re-upload with new type
@@ -472,10 +472,10 @@ export default function LifeInsurance() {
           progress: 0,
           error: null
         };
-        
+
         // Show notification and auto-retry upload with new type
         toast.info(`Document type changed. Re-uploading "${fileObj.file.name}" with new type...`);
-        
+
         // Trigger re-upload after a short delay to ensure state is updated
         setTimeout(() => {
           uploadFileAtIndex(index);
@@ -484,7 +484,7 @@ export default function LifeInsurance() {
         // File hasn't been uploaded yet, just update the type
         // The upload will use the new type automatically when it starts
       }
-      
+
       return next;
     });
   }, [uploadFileAtIndex]);
@@ -494,12 +494,12 @@ export default function LifeInsurance() {
     setUploadedFiles(prev => {
       const next = [...prev];
       const fileObj = next[index];
-      
+
       if (fileObj?.uploading) {
         toast.warning('Cannot remove file while upload is in progress');
         return prev;
       }
-      
+
       // Remove the file
       const newFiles = next.filter((_, i) => i !== index);
       toast.success(`File "${fileObj?.file.name}" removed`);
@@ -546,7 +546,7 @@ export default function LifeInsurance() {
   const processDocuments = async () => {
     setIsProcessing(true);
     changeStep(2);
-    
+
     // Very quick AI processing animation (500ms total)
     setAssistantMessage('Processing documents...');
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -581,18 +581,18 @@ export default function LifeInsurance() {
   // Calculate recommended coverage based on income
   const getRecommendedCoverage = (income: string) => {
     const incomeNum = parseInt(income) || 0;
-    
+
     // Rule: Coverage should be 10-15x of annual income
     // We'll use 12x as the recommendation
     const recommendedCoverage = incomeNum * 12;
-    
+
     // Round to nearest 5 lakhs
     const roundedCoverage = Math.round(recommendedCoverage / 500000) * 500000;
-    
+
     // Ensure it's within acceptable range (min 50L, max 2Cr)
     if (roundedCoverage < 5000000) return 5000000;
     if (roundedCoverage > 20000000) return 20000000;
-    
+
     return roundedCoverage;
   };
 
@@ -602,7 +602,7 @@ export default function LifeInsurance() {
       toast.error('Please enter a valid 12-digit Aadhaar number');
       return;
     }
-    
+
     setIsProcessing(true);
     // Simulate API call to DigiLocker
     await new Promise(resolve => setTimeout(resolve, 1500));
@@ -616,7 +616,7 @@ export default function LifeInsurance() {
       toast.error('Please enter a valid 6-digit OTP');
       return;
     }
-    
+
     setIsProcessing(true);
     // Simulate OTP verification
     await new Promise(resolve => setTimeout(resolve, 1500));
@@ -630,7 +630,7 @@ export default function LifeInsurance() {
       toast.error('Please enter a valid 12-digit Aadhaar number');
       return;
     }
-    
+
     setIsProcessing(true);
     // Simulate API call to DigiLocker
     await new Promise(resolve => setTimeout(resolve, 1500));
@@ -644,7 +644,7 @@ export default function LifeInsurance() {
       toast.error('Please enter a valid 6-digit OTP');
       return;
     }
-    
+
     setIsProcessing(true);
     // Simulate OTP verification
     await new Promise(resolve => setTimeout(resolve, 1500));
@@ -756,11 +756,11 @@ export default function LifeInsurance() {
             if (r && (r.fileUrl || r.fileurl)) {
               // Use actual documentType from upload instead of hardcoded 'kyc'
               const docType = r.documentType || 'other'; // Fallback to 'other' if not available
-              uploadedDocs.push({ 
-                filename: r.fileName || r.file || null, 
-                url: r.fileUrl || r.fileurl, 
-                documentId: r.documentId || r.document_id || null, 
-                docType: docType 
+              uploadedDocs.push({
+                filename: r.fileName || r.file || null,
+                url: r.fileUrl || r.fileurl,
+                documentId: r.documentId || r.document_id || null,
+                docType: docType
               });
             }
           }
@@ -836,7 +836,7 @@ export default function LifeInsurance() {
         kyc_verification: { policyholder: userKycStatus, nominee: nomineeKycStatus },
         payment: { method: formData.paymentMethod, status: 'processing' }
       };
-      
+
       // Attach a minimal `policy` object so backend can create a SQL Policy
       // and record its id on the Mongo application document.
       const selectedPlan = planVariants.find(p => p.id === formData.selectedPlan);
@@ -863,9 +863,8 @@ export default function LifeInsurance() {
 
       const res = await createLifeApplication(payload);
       const appId = res?.id;
-
-      // Simulate payment then update payment status
-      const newPolicyNumber = `LIFE${Date.now()}`;
+      // Use the policy number returned from the backend, or fallback if missing (should not happen)
+      const newPolicyNumber = res?.policyNumber || `LIFE${Date.now()}`;
       setPolicyNumber(newPolicyNumber);
       toast.success('Payment processed successfully!');
       setAssistantMessage('Your Life Insurance Policy is Active 🎉. Your e-policy has been sent to your registered email.');
@@ -922,12 +921,12 @@ export default function LifeInsurance() {
   const calculateTotalPremium = () => {
     const selectedPlanData = planVariants.find(p => p.id === formData.selectedPlan);
     const basePremium = selectedPlanData?.premium || 12500;
-    
+
     const ridersCost = formData.selectedRiders.reduce((sum, riderId) => {
       const rider = riders.find(r => r.id === riderId);
       return sum + (rider?.price || 0);
     }, 0);
-    
+
     return basePremium + ridersCost;
   };
 
@@ -1094,29 +1093,29 @@ export default function LifeInsurance() {
                           const isSuccess = fobj.uploadedUrl && !fobj.error;
                           const isError = fobj.error && !fobj.uploading;
                           const isPending = !isUploading && !isSuccess && !isError;
-                          
+
                           // Dynamic styling based on status
-                          const bgColor = isError 
-                            ? 'bg-red-50 border-red-200' 
-                            : isSuccess 
-                            ? 'bg-green-50 border-green-200' 
-                            : isUploading
-                            ? 'bg-blue-50 border-blue-200'
-                            : 'bg-gray-50 border-gray-200';
-                          
-                          const iconColor = isError 
-                            ? 'text-red-600' 
-                            : isSuccess 
-                            ? 'text-green-600' 
-                            : isUploading
-                            ? 'text-blue-600'
-                            : 'text-gray-400';
-                          
-                          const progressColor = isError 
-                            ? 'bg-red-500' 
-                            : isSuccess 
-                            ? 'bg-green-500' 
-                            : 'bg-blue-500';
+                          const bgColor = isError
+                            ? 'bg-red-50 border-red-200'
+                            : isSuccess
+                              ? 'bg-green-50 border-green-200'
+                              : isUploading
+                                ? 'bg-blue-50 border-blue-200'
+                                : 'bg-gray-50 border-gray-200';
+
+                          const iconColor = isError
+                            ? 'text-red-600'
+                            : isSuccess
+                              ? 'text-green-600'
+                              : isUploading
+                                ? 'text-blue-600'
+                                : 'text-gray-400';
+
+                          const progressColor = isError
+                            ? 'bg-red-500'
+                            : isSuccess
+                              ? 'bg-green-500'
+                              : 'bg-blue-500';
 
                           return (
                             <div key={idx} className={`flex items-center gap-3 p-3 border rounded-lg ${bgColor} transition-colors`}>
@@ -1132,7 +1131,7 @@ export default function LifeInsurance() {
                                   <FileCheck className="w-5 h-5" />
                                 )}
                               </div>
-                              
+
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between gap-2 mb-2">
                                   <span className="text-sm font-medium truncate" title={fobj.file.name}>
@@ -1167,9 +1166,9 @@ export default function LifeInsurance() {
                                 {/* Progress Bar */}
                                 <div className="mt-2">
                                   <div className="w-full bg-gray-200 h-2 rounded overflow-hidden">
-                                    <div 
-                                      className={`h-2 transition-all duration-300 ${progressColor}`} 
-                                      style={{ width: `${fobj.progress}%` }} 
+                                    <div
+                                      className={`h-2 transition-all duration-300 ${progressColor}`}
+                                      style={{ width: `${fobj.progress}%` }}
                                     />
                                   </div>
                                   <div className="flex items-center justify-between text-xs mt-1">
@@ -1182,7 +1181,7 @@ export default function LifeInsurance() {
                                   </div>
                                 </div>
                               </div>
-                              
+
                               {/* Action Button - Only show retry for errors */}
                               {isError && (
                                 <div className="flex flex-col gap-2">
@@ -1259,7 +1258,7 @@ export default function LifeInsurance() {
                     >
                       <Sparkles className="w-10 h-10 text-white" />
                     </motion.div>
-                    
+
                     <h2 className="text-3xl mb-4">Processing Demo Data</h2>
                     <p className="text-gray-600 mb-8">Almost ready...</p>
 
@@ -1419,8 +1418,8 @@ export default function LifeInsurance() {
                       <Alert className="bg-purple-50 border-purple-200">
                         <Sparkles className="h-4 w-4 text-purple-600" />
                         <AlertDescription className="text-sm">
-                          <strong>AI Recommendation:</strong> Based on your annual income of ₹{parseInt(formData.annualIncome).toLocaleString()}, 
-                          we recommend a coverage of ₹{(getRecommendedCoverage(formData.annualIncome) / 10000000).toFixed(1)} Cr 
+                          <strong>AI Recommendation:</strong> Based on your annual income of ₹{parseInt(formData.annualIncome).toLocaleString()},
+                          we recommend a coverage of ₹{(getRecommendedCoverage(formData.annualIncome) / 10000000).toFixed(1)} Cr
                           (approximately 12x your annual income).
                         </AlertDescription>
                       </Alert>
@@ -1504,7 +1503,7 @@ export default function LifeInsurance() {
                   <CardHeader>
                     <CardTitle>Choose Your Life Cover</CardTitle>
                     <CardDescription>
-                      Based on your annual income of ₹{parseInt(formData.annualIncome || '0').toLocaleString()}, 
+                      Based on your annual income of ₹{parseInt(formData.annualIncome || '0').toLocaleString()},
                       we recommend ₹{(getRecommendedCoverage(formData.annualIncome) / 10000000).toFixed(1)} Cr for optimal protection
                     </CardDescription>
                   </CardHeader>
@@ -1523,8 +1522,8 @@ export default function LifeInsurance() {
                             Your annual income: <strong>₹{parseInt(formData.annualIncome || '0').toLocaleString()}</strong>
                           </p>
                           <p className="text-sm text-gray-700 mb-3">
-                            Industry standard suggests coverage should be 10-15x of annual income. 
-                            For your profile, <strong>₹{(getRecommendedCoverage(formData.annualIncome) / 10000000).toFixed(1)} Cr</strong> provides 
+                            Industry standard suggests coverage should be 10-15x of annual income.
+                            For your profile, <strong>₹{(getRecommendedCoverage(formData.annualIncome) / 10000000).toFixed(1)} Cr</strong> provides
                             comprehensive financial protection for your family.
                           </p>
                           <Button
@@ -1632,7 +1631,7 @@ export default function LifeInsurance() {
                     {riders.map((rider) => {
                       const Icon = rider.icon;
                       const isSelected = formData.selectedRiders.includes(rider.id);
-                      
+
                       return (
                         <Card
                           key={rider.id}
@@ -1726,9 +1725,9 @@ export default function LifeInsurance() {
                                 <span>{plan.term} years</span>
                               </div>
                             </div>
-                            
+
                             <Separator />
-                            
+
                             <div className="space-y-2">
                               {plan.features.map((feature, idx) => (
                                 <div key={idx} className="flex items-center gap-2 text-sm">
@@ -2250,7 +2249,7 @@ export default function LifeInsurance() {
                       <Alert className="bg-blue-50 border-blue-200">
                         <Info className="h-4 w-4 text-blue-600" />
                         <AlertDescription className="text-sm">
-                          <strong>DigiLocker KYC:</strong> Complete Aadhaar-based verification for both policyholder and nominee to proceed. 
+                          <strong>DigiLocker KYC:</strong> Complete Aadhaar-based verification for both policyholder and nominee to proceed.
                           OTPs will be sent to registered mobile numbers.
                         </AlertDescription>
                       </Alert>
@@ -2259,16 +2258,14 @@ export default function LifeInsurance() {
                     {/* Two Column Layout for User and Nominee */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* User/Policyholder Verification */}
-                      <Card className={`border-2 ${
-                        userKycStatus === 'verified' 
-                          ? 'border-green-200 bg-green-50/30' 
-                          : 'border-blue-200 bg-blue-50/30'
-                      }`}>
+                      <Card className={`border-2 ${userKycStatus === 'verified'
+                        ? 'border-green-200 bg-green-50/30'
+                        : 'border-blue-200 bg-blue-50/30'
+                        }`}>
                         <CardHeader>
                           <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                              userKycStatus === 'verified' ? 'bg-green-600' : 'bg-blue-600'
-                            }`}>
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${userKycStatus === 'verified' ? 'bg-green-600' : 'bg-blue-600'
+                              }`}>
                               {userKycStatus === 'verified' ? (
                                 <CheckCircle className="w-5 h-5 text-white" />
                               ) : (
@@ -2421,16 +2418,14 @@ export default function LifeInsurance() {
                       </Card>
 
                       {/* Nominee Verification */}
-                      <Card className={`border-2 ${
-                        nomineeKycStatus === 'verified' 
-                          ? 'border-green-200 bg-green-50/30' 
-                          : 'border-purple-200 bg-purple-50/30'
-                      }`}>
+                      <Card className={`border-2 ${nomineeKycStatus === 'verified'
+                        ? 'border-green-200 bg-green-50/30'
+                        : 'border-purple-200 bg-purple-50/30'
+                        }`}>
                         <CardHeader>
                           <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                              nomineeKycStatus === 'verified' ? 'bg-green-600' : 'bg-purple-600'
-                            }`}>
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${nomineeKycStatus === 'verified' ? 'bg-green-600' : 'bg-purple-600'
+                              }`}>
                               {nomineeKycStatus === 'verified' ? (
                                 <CheckCircle className="w-5 h-5 text-white" />
                               ) : (

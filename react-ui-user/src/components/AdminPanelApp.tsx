@@ -13,6 +13,7 @@ import { CaseDetails } from '@admin-panel/components/CaseDetails';
 import { AgentPerformance } from '@admin-panel/components/AgentPerformance';
 import { HumanReviewQueue } from '@admin-panel/components/HumanReviewQueue';
 import { AuditLog } from '@admin-panel/components/AuditLog';
+import { Settings } from '@admin-panel/components/Settings';
 import { Toaster } from '@admin-panel/components/ui/sonner';
 
 /**
@@ -84,6 +85,8 @@ export default function AdminPanelApp() {
         return <HumanReviewQueue onViewClaim={setSelectedClaim} />;
       case 'audit':
         return <AuditLog />;
+      case 'settings':
+        return <Settings />;
       default:
         return <DashboardOverview onViewClaim={setSelectedClaim} />;
     }
@@ -100,11 +103,11 @@ export default function AdminPanelApp() {
         onLogout={handleLogout}
         currentPageTitle={getPageTitle()}
       />
-      
+
       {/* Main Content Area with Sidebar - Starts below header (70px) */}
       <div className="flex flex-1 overflow-hidden" style={{ marginTop: '70px', height: 'calc(100vh - 70px)' }}>
-        <Sidebar 
-          activeView={activeView} 
+        <Sidebar
+          activeView={activeView}
           onNavigate={handleNavigation}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}

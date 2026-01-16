@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { 
-  Shield, Heart, TrendingUp, Award, Clock, CheckCircle, 
+import {
+  Shield, Heart, TrendingUp, Award, Clock, CheckCircle,
   ArrowRight, ShoppingCart, Download, FileText,
   Users, CreditCard, Star,
   DollarSign, Calendar, AlertCircle, X, Info,
@@ -14,7 +14,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '..
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { LucideIcon } from 'lucide-react';
 
 // TypeScript Interfaces for Type Safety
@@ -236,21 +236,21 @@ export default function LifeInsuranceBrochure() {
 
   const handleBuyNow = (planId?: string) => {
     const planToUse = planId || selectedPlan;
-    
+
     if (!isAuthenticated) {
       // Redirect to login with return path including plan selection
-      const returnPath = planToUse 
+      const returnPath = planToUse
         ? `/life-insurance/apply?plan=${planToUse}`
         : '/life-insurance/apply';
       navigate(`/login?return=${encodeURIComponent(returnPath)}`);
       toast.info('Please login to continue');
       return;
     }
-    
+
     // Navigate to application form with plan selection
     const params = planToUse ? `?plan=${planToUse}` : '';
     navigate(`/life-insurance/apply${params}`);
-    
+
     // Show success message if plan was selected
     if (planToUse) {
       const planName = planVariants.find(p => p.id === planToUse)?.name || 'selected plan';
@@ -293,7 +293,7 @@ export default function LifeInsuranceBrochure() {
   const selectedPlanData = selectedPlan ? planVariants.find(p => p.id === selectedPlan) : null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+    <div className="pt-[70px] min-h-screen bg-gradient-to-b from-slate-50 to-white">
       {/* Selected Plan Indicator */}
       {selectedPlanData && (
         <motion.div
@@ -414,7 +414,7 @@ export default function LifeInsuranceBrochure() {
               Select the plan that best fits your needs and budget
             </p>
           </motion.div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
             {planVariants.map((plan, index) => (
               <motion.div
                 key={plan.id}
@@ -422,12 +422,11 @@ export default function LifeInsuranceBrochure() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
+                className="flex flex-col h-full"
               >
-                <Card className={`h-full relative overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-105 ${
-                  plan.recommended ? 'border-2 border-primary shadow-lg md:scale-105' : ''
-                } ${
-                  selectedPlan === plan.id ? 'ring-2 ring-primary ring-offset-2 border-primary' : ''
-                }`}>
+                <Card className={`flex flex-col h-full relative overflow-hidden transition-all duration-300 hover:shadow-xl ${plan.recommended ? 'border-2 border-primary shadow-lg ring-2 ring-primary/20 bg-slate-50/50' : ''
+                  } ${selectedPlan === plan.id ? 'ring-2 ring-primary ring-offset-2 border-primary' : ''
+                  }`}>
                   {plan.recommended && (
                     <div className="absolute top-0 right-0 bg-gradient-to-r from-primary to-cyan-600 text-white px-3 md:px-4 py-1 rounded-bl-lg z-10">
                       <Badge variant="secondary" className="bg-transparent text-white border-0 text-xs md:text-sm">
@@ -439,11 +438,11 @@ export default function LifeInsuranceBrochure() {
                     <CardTitle className="text-xl md:text-2xl">{plan.name}</CardTitle>
                     <CardDescription className="text-xs md:text-sm">Perfect for comprehensive protection</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4 md:space-y-6">
+                  <CardContent className="flex flex-col flex-grow space-y-4 md:space-y-6">
                     <div>
                       <div className="flex items-baseline mb-2">
                         <span className="text-2xl md:text-3xl font-bold">
-                          {plan.coverage >= 10000000 
+                          {plan.coverage >= 10000000
                             ? `₹${(plan.coverage / 10000000).toFixed(1)}Cr`
                             : `₹${(plan.coverage / 100000).toFixed(0)}L`
                           }
@@ -460,20 +459,21 @@ export default function LifeInsuranceBrochure() {
                       </div>
                     </div>
                     <Separator />
-                    <ul className="space-y-2">
-                      {plan.features.map((feature, idx) => (
-                        <li key={idx} className="flex items-start gap-2">
-                          <CheckCircle className="w-3 h-3 md:w-4 md:h-4 text-green-600 flex-shrink-0 mt-0.5" />
-                          <span className="text-xs md:text-sm leading-relaxed">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="flex-grow">
+                      <ul className="space-y-2">
+                        {plan.features.map((feature, idx) => (
+                          <li key={idx} className="flex items-start gap-2">
+                            <CheckCircle className="w-3 h-3 md:w-4 md:h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                            <span className="text-xs md:text-sm leading-relaxed">{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                     <Button
-                      className={`w-full mt-4 md:mt-6 ${
-                        plan.recommended || selectedPlan === plan.id
-                          ? 'bg-gradient-to-r from-primary to-cyan-600 hover:from-primary/90 hover:to-cyan-600/90'
-                          : ''
-                      } transition-all duration-300`}
+                      className={`w-full ${plan.recommended || selectedPlan === plan.id
+                        ? 'bg-gradient-to-r from-primary to-cyan-600 hover:from-primary/90 hover:to-cyan-600/90'
+                        : ''
+                        } transition-all duration-300`}
                       variant={plan.recommended || selectedPlan === plan.id ? 'default' : 'outline'}
                       onClick={() => {
                         setSelectedPlan(plan.id);
@@ -741,7 +741,7 @@ export default function LifeInsuranceBrochure() {
 
       {/* Terms & Conditions Section */}
       <section className="py-12 md:py-16 bg-white print:py-8">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl print:max-w-full print:px-4">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl print:max-w-full print:px-4">
           <motion.div
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
@@ -802,7 +802,7 @@ export default function LifeInsuranceBrochure() {
 
       {/* FAQ Section */}
       <section className="py-12 md:py-16 bg-gradient-to-b from-slate-50 to-white print:hidden">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl">
           <motion.div
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
@@ -835,7 +835,7 @@ export default function LifeInsuranceBrochure() {
 
       {/* Final Call-to-Action Section */}
       <section className="py-12 md:py-20 bg-gradient-to-br from-primary/10 via-cyan-500/10 to-pink-500/10">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl text-center">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -847,11 +847,11 @@ export default function LifeInsuranceBrochure() {
             <p className="text-lg sm:text-xl text-muted-foreground mb-6 md:mb-8 px-4">
               Get comprehensive life insurance coverage in just a few simple steps
             </p>
-            <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center px-4 mb-6">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-3 md:gap-4 justify-center px-4 mb-6">
               <Button
                 onClick={handleBuyNow}
                 size="lg"
-                className="bg-gradient-to-r from-primary to-cyan-600 hover:from-primary/90 hover:to-cyan-600/90 text-base md:text-lg px-6 md:px-8 py-5 md:py-6 shadow-lg hover:shadow-xl transition-all duration-300 w-full sm:w-auto"
+                className="bg-gradient-to-r from-primary to-cyan-600 hover:from-primary/90 hover:to-cyan-600/90 text-base md:text-lg px-6 md:px-8 py-5 md:py-6 shadow-lg hover:shadow-xl transition-all duration-300 w-full sm:w-auto sm:min-w-[160px] flex-1 sm:flex-none"
               >
                 <ShoppingCart className="w-4 h-4 md:w-5 md:h-5 mr-2" />
                 Buy Now
@@ -859,7 +859,7 @@ export default function LifeInsuranceBrochure() {
               <Button
                 variant="outline"
                 size="lg"
-                className="text-base md:text-lg px-6 md:px-8 py-5 md:py-6 transition-all duration-300 w-full sm:w-auto"
+                className="text-base md:text-lg px-6 md:px-8 py-5 md:py-6 transition-all duration-300 w-full sm:w-auto sm:min-w-[160px] flex-1 sm:flex-none"
                 onClick={handleDownload}
               >
                 <Download className="w-4 h-4 md:w-5 md:h-5 mr-2" />
@@ -868,7 +868,7 @@ export default function LifeInsuranceBrochure() {
               <Button
                 variant="outline"
                 size="lg"
-                className="text-base md:text-lg px-6 md:px-8 py-5 md:py-6 transition-all duration-300 w-full sm:w-auto print:hidden"
+                className="text-base md:text-lg px-6 md:px-8 py-5 md:py-6 transition-all duration-300 w-full sm:w-auto sm:min-w-[160px] flex-1 sm:flex-none print:hidden"
                 onClick={handlePrint}
               >
                 <Printer className="w-4 h-4 md:w-5 md:h-5 mr-2" />
